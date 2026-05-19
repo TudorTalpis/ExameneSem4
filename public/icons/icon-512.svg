@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="114" fill="#4f46e5"/>
+  <!-- mortarboard cap -->
+  <polygon points="256,136 394,202 256,268 118,202" fill="white" opacity="0.95"/>
+  <rect x="378" y="202" width="16" height="74" rx="8" fill="white" opacity="0.7"/>
+  <ellipse cx="386" cy="283" rx="18" ry="13" fill="white" opacity="0.7"/>
+  <path d="M186,238 L186,308 Q256,342 326,308 L326,238" fill="white" opacity="0.85"/>
+</svg>

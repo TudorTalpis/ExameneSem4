@@ -51,7 +51,7 @@ export function QuizPage() {
 
   if (!questions) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-400">
+      <div className="min-h-screen flex items-center justify-center text-slate-400 dark:text-slate-500 bg-gray-50 dark:bg-slate-900">
         Se încarcă întrebările…
       </div>
     );
@@ -181,7 +181,7 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
   // ---- result screen ----
   if (isDone || (mode === 'quiz' || mode === 'review') && !currentQuestion && session !== null) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors duration-200">
         <div className="max-w-2xl mx-auto px-4 pt-4">
           <Breadcrumbs crumbs={crumbs} />
         </div>
@@ -199,7 +199,7 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
   // ---- loading / home fallback ----
   if (mode === 'home' || !currentQuestion) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-400">
+      <div className="min-h-screen flex items-center justify-center text-slate-400 dark:text-slate-500 bg-gray-50 dark:bg-slate-900">
         Se pregătesc întrebările…
       </div>
     );
@@ -207,14 +207,14 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
 
   // ---- main quiz UI ----
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col transition-colors duration-200">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 shadow-sm">
+      <header className="sticky top-0 z-10 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-2 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <button
               onClick={handleGoHome}
-              className="text-slate-400 hover:text-slate-600 text-sm transition-colors"
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm transition-colors"
             >
               ← {topicLabel ?? exam?.title ?? 'Înapoi'}
             </button>
@@ -230,7 +230,7 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
 
       {/* History mode banner */}
       {isReadOnly && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-700 text-xs text-center py-1.5 font-medium">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-xs text-center py-1.5 font-medium">
           📖 Răspuns anterior — {historyIdx! + 1} / {history.length}
         </div>
       )}
@@ -255,8 +255,8 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
           {canGoBack && (
             <button
               onClick={handleBack}
-              className="flex-1 py-2.5 rounded-xl bg-white border-2 border-slate-200 text-slate-600
-                text-sm font-medium hover:border-slate-300 hover:bg-slate-50
+              className="flex-1 py-2.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300
+                text-sm font-medium hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700
                 active:scale-95 transition-all duration-150"
             >
               ← Anterioară
@@ -269,7 +269,7 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
                 active:scale-95 transition-all duration-150
                 ${isAtLastHistory
                   ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                  : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                  : 'bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
             >
               {isAtLastHistory ? 'Continuă →' : 'Următoarea →'}
@@ -279,7 +279,7 @@ function QuizSession({ examId, questions, topicId, initialMode, onBack }: QuizSe
       )}
 
       {/* Footer */}
-      <footer className="text-center text-xs text-slate-300 pb-3">
+      <footer className="text-center text-xs text-slate-300 dark:text-slate-600 pb-3">
         {mode === 'review' ? '📝 Mod revizuire greșeli' : '🎯 Mod sesiune normală'}
       </footer>
     </div>

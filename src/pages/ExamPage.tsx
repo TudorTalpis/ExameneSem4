@@ -13,7 +13,7 @@ export function ExamPage() {
 
   if (!exam) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-400">
+      <div className="min-h-screen flex items-center justify-center text-slate-400 dark:text-slate-500 dark:bg-slate-900">
         Examen inexistent.{' '}
         <button className="ml-2 text-indigo-500 underline" onClick={() => navigate('/')}>
           Acasă
@@ -33,7 +33,7 @@ export function ExamPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors duration-200">
       <div className="max-w-2xl mx-auto px-4 py-6">
         <Breadcrumbs
           crumbs={[
@@ -46,20 +46,20 @@ export function ExamPage() {
         <div className="flex items-center gap-3 mt-4 mb-6">
           <span className="text-4xl">{exam.icon}</span>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">{exam.title}</h1>
-            <p className="text-slate-500 text-sm">{exam.subtitle}</p>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{exam.title}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">{exam.subtitle}</p>
           </div>
         </div>
 
         {/* Summary card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 mb-6">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-slate-700 font-medium">
+            <span className="text-slate-700 dark:text-slate-200 font-medium">
               {examProgress.learnedCount} / {totalQuestions} învățate
             </span>
-            <span className="text-indigo-600 font-bold">{examProgress.pct}%</span>
+            <span className="text-indigo-600 dark:text-indigo-400 font-bold">{examProgress.pct}%</span>
           </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
+          <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
             <div
               className="h-full bg-indigo-500 rounded-full transition-all duration-500"
               style={{ width: `${examProgress.pct}%` }}
@@ -78,8 +78,9 @@ export function ExamPage() {
             {examProgress.mistakeCount > 0 && (
               <button
                 onClick={() => navigate(`/exam/${examId}/quiz?mode=review`)}
-                className="flex-1 py-2.5 rounded-xl bg-rose-50 border-2 border-rose-200
-                  text-rose-700 text-sm font-medium hover:bg-rose-100 active:scale-95 transition-all"
+                className="flex-1 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-900/20 border-2
+                  border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-400
+                  text-sm font-medium hover:bg-rose-100 dark:hover:bg-rose-900/30 active:scale-95 transition-all"
               >
                 📝 Greșeli ({examProgress.mistakeCount})
               </button>
@@ -88,7 +89,7 @@ export function ExamPage() {
         </div>
 
         {/* Topic list */}
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
           Teme
         </h2>
         <div className="flex flex-col gap-2">
@@ -120,19 +121,22 @@ function TopicRow({ topic, onStart }: TopicRowProps) {
   return (
     <button
       onClick={onStart}
-      className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl bg-white
-        border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50
+      className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl
+        bg-white dark:bg-slate-800
+        border-2 border-slate-200 dark:border-slate-700
+        hover:border-indigo-300 dark:hover:border-indigo-600
+        hover:bg-indigo-50 dark:hover:bg-indigo-900/20
         active:scale-95 transition-all duration-150"
     >
       <span className="text-xl w-7 text-center">{topic.icon}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-slate-800 font-medium text-sm leading-tight">{topic.title}</p>
+        <p className="text-slate-800 dark:text-slate-100 font-medium text-sm leading-tight">{topic.title}</p>
         {topic.description && (
-          <p className="text-slate-400 text-xs mt-0.5 truncate">{topic.description}</p>
+          <p className="text-slate-400 dark:text-slate-500 text-xs mt-0.5 truncate">{topic.description}</p>
         )}
       </div>
-      <span className="text-slate-400 text-xs shrink-0">{topic.questionCount} înt.</span>
-      <span className="text-slate-300 text-sm">›</span>
+      <span className="text-slate-400 dark:text-slate-500 text-xs shrink-0">{topic.questionCount} înt.</span>
+      <span className="text-slate-300 dark:text-slate-600 text-sm">›</span>
     </button>
   );
 }

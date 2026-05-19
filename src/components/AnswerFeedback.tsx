@@ -6,8 +6,8 @@ interface Props {
 export function AnswerFeedback({ explanation, onNext }: Props) {
   return (
     <div className="mt-4 animate-fadeIn">
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed">
-        <p className="font-semibold text-slate-800 mb-1">📖 Explicație</p>
+      <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+        <p className="font-semibold text-slate-800 dark:text-slate-100 mb-1">📖 Explicație</p>
         <p>{explanation}</p>
       </div>
       <button

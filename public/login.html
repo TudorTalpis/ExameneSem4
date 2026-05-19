@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acces — Quiz Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f172a 0%, #134e4a 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 1rem;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #0f766e;
+      border-radius: 1rem;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+    }
+
+    .icon {
+      width: 3.5rem;
+      height: 3.5rem;
+      background: linear-gradient(135deg, #0d9488, #0f766e);
+      border-radius: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      font-size: 1.75rem;
+    }
+
+    h1 {
+      color: #f1f5f9;
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    label {
+      display: block;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    input[type="password"] {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      color: #f1f5f9;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="password"]:focus {
+      border-color: #0d9488;
+      box-shadow: 0 0 0 3px rgba(13,148,136,0.2);
+    }
+
+    .error {
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 0.5rem;
+      padding: 0.625rem 0.875rem;
+      color: #fca5a5;
+      font-size: 0.875rem;
+      margin-top: 0.75rem;
+    }
+
+    .error.visible { display: flex; }
+
+    button {
+      width: 100%;
+      margin-top: 1.5rem;
+      padding: 0.875rem;
+      background: linear-gradient(135deg, #0d9488, #0f766e);
+      border: none;
+      border-radius: 0.5rem;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    button:hover { opacity: 0.9; }
+    button:active { transform: scale(0.98); }
+
+    .footer {
+      color: #475569;
+      font-size: 0.75rem;
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🔐</div>
+    <h1>Quiz Platform</h1>
+    <p class="subtitle">Introdu parola pentru a accesa platforma</p>
+
+    <form method="POST" action="/api/login">
+      <label for="password">Parolă de acces</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        placeholder="••••••••"
+        autocomplete="current-password"
+        autofocus
+        required
+      />
+
+      <div class="error" id="err">
+        <span>⚠️</span>
+        <span>Parolă incorectă. Încearcă din nou.</span>
+      </div>
+
+      <button type="submit">Intră în platformă →</button>
+    </form>
+
+    <p class="footer">Acces restricționat · UTM</p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    if (params.get('error')) {
+      document.getElementById('err').classList.add('visible');
+    }
+  </script>
+</body>
+</html>
