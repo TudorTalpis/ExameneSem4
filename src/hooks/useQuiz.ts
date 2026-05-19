@@ -1,11 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { useLocalStorage } from './useLocalStorage';
-import { allQuestions } from '../data';
 import { shuffle } from '../utils/shuffle';
 import { reinsertOffset, reinsertId } from '../utils/repetition';
-import type { SessionState, QuestionRecord } from '../types/question';
-
-const STORAGE_KEY = 'ams-quiz-session';
+import type { Question, SessionState, QuestionRecord } from '../types/question';
 
 function buildInitialState(questionIds: string[]): SessionState {
   const records: Record<string, QuestionRecord> = {};
@@ -20,23 +17,34 @@ function buildInitialState(questionIds: string[]): SessionState {
   };
 }
 
-export type QuizMode = 'home' | 'quiz' | 'review' | 'result';
+export type QuizMode = 'home' | 'quiz' | 'review';
 
-export function useQuiz() {
+/**
+ * useQuiz – self-contained quiz engine.
+ *
+ * @param examId   Unique exam identifier — used as part of the localStorage key
+ *                 so each exam keeps its own progress.
+ * @param questions The full list of questions for this quiz session.
+ *                  Pass a topic-filtered subset for topic-specific quizzes.
+ */
+export function useQuiz(examId: string, questions: Question[]) {
+  const STORAGE_KEY = `quiz-session-${examId}`;
+  const MODE_KEY    = `quiz-mode-${examId}`;
+
   const questionMap = useMemo(() => {
-    const m: Record<string, (typeof allQuestions)[0]> = {};
-    allQuestions.forEach(q => { m[q.id] = q; });
+    const m: Record<string, Question> = {};
+    questions.forEach(q => { m[q.id] = q; });
     return m;
-  }, []);
+  }, [questions]);
 
-  const allIds = useMemo(() => allQuestions.map(q => q.id), []);
+  const allIds = useMemo(() => questions.map(q => q.id), [questions]);
 
   const [session, setSession, clearSession] = useLocalStorage<SessionState | null>(
     STORAGE_KEY,
-    null
+    null,
   );
 
-  const [mode, setMode] = useLocalStorage<QuizMode>('ams-quiz-mode', 'home');
+  const [mode, setMode] = useLocalStorage<QuizMode>(MODE_KEY, 'home');
 
   // ---- computed helpers ----
 
@@ -72,7 +80,6 @@ export function useQuiz() {
   const startReview = useCallback(() => {
     if (!session || mistakeIds.length === 0) return;
     const shuffled = shuffle([...mistakeIds]);
-    // keep existing records (preserve wrongCount) but reset queue
     setSession(prev => {
       if (!prev) return prev;
       return {
@@ -101,9 +108,9 @@ export function useQuiz() {
     setSession(prev => {
       if (!prev) return prev;
 
-      const rec = { ...prev.records[id] };
+      const rec   = { ...prev.records[id] };
       const stats = { ...prev.stats };
-      let queue = [...prev.queue];
+      let queue   = [...prev.queue];
 
       // Remove current head from queue
       queue = queue.slice(1);
@@ -111,7 +118,6 @@ export function useQuiz() {
       if (isCorrect) {
         stats.correctTotal += 1;
         if (rec.wrongCount === 0) {
-          // First-time correct → learned immediately
           rec.learned = true;
           rec.consecutiveCorrect += 1;
         } else {
@@ -119,8 +125,7 @@ export function useQuiz() {
           if (rec.consecutiveCorrect >= 2) {
             rec.learned = true;
           } else {
-            // Still needs one more correct → reinsert at small offset
-            const offset = reinsertOffset(rec.wrongCount + 10); // use small offset branch
+            const offset = reinsertOffset(rec.wrongCount + 10);
             queue = reinsertId(queue, id, 0, offset);
           }
         }
@@ -133,7 +138,7 @@ export function useQuiz() {
       }
 
       const records = { ...prev.records, [id]: rec };
-      const nextId = queue[0] ?? null;
+      const nextId  = queue[0] ?? null;
 
       return {
         ...prev,
@@ -147,7 +152,6 @@ export function useQuiz() {
 
   const goHome = useCallback(() => setMode('home'), [setMode]);
 
-  // Detect done state (queue empty + all not-learned questions have been handled)
   const isDone = session !== null && session.queue.length === 0 && session.activeId === null;
 
   return {
