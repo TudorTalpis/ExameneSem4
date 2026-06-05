@@ -80,5 +80,21 @@ export const tehnologiiWebManifest: ExamManifest = {
       questionCount: 20,
       description: 'Express, REST/CRUD, CORS, status HTTP, req/res, Vercel, git, .gitignore, .env',
     },
+    {
+      id: 'backend-efcore',
+      title: 'Backend .NET: EF Core & CRUD',
+      icon: '🗄️',
+      order: 10,
+      questionCount: 11,
+      description: 'GetById, DTO vs entitate, FirstOrDefault, soft/hard delete, SaveChanges, using — analiză cod & construiește cod',
+    },
+    {
+      id: 'backend-arhitectura',
+      title: 'Backend .NET: API & Arhitectură',
+      icon: '🏛️',
+      order: 11,
+      questionCount: 12,
+      description: 'Controller, [ApiController]/[FromBody], IActionResult, interfețe, clase base/derived (Actions/Flow), Business Logic',
+    },
   ],
 };

@@ -7,6 +7,8 @@ import { twContextQuestions } from './tw-context';
 import { twTypescriptToolingQuestions } from './tw-typescript-tooling';
 import { twAsyncFetchQuestions } from './tw-async-fetch';
 import { twBackendDeployQuestions } from './tw-backend-deploy';
+import { twBackendEfcoreQuestions } from './tw-backend-efcore';
+import { twBackendArhitecturaQuestions } from './tw-backend-arhitectura';
 
 export const twAllQuestions = [
   ...twFundamenteQuestions,
@@ -18,4 +20,6 @@ export const twAllQuestions = [
   ...twTypescriptToolingQuestions,
   ...twAsyncFetchQuestions,
   ...twBackendDeployQuestions,
+  ...twBackendEfcoreQuestions,
+  ...twBackendArhitecturaQuestions,
 ];
