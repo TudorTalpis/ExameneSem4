@@ -2,6 +2,7 @@ import type { ExamManifest } from '../types/exam';
 import type { Question } from '../types/question';
 import { amsUmlManifest } from './exams/ams-uml/manifest';
 import { tsiManifest } from './exams/tsi/manifest';
+import { tehnologiiWebManifest } from './exams/tehnologii-web/manifest';
 
 // ---- Exam registry -------------------------------------------------------
 // To add a new exam: create src/data/exams/<id>/manifest.ts and add it here.
@@ -9,6 +10,7 @@ import { tsiManifest } from './exams/tsi/manifest';
 export const examRegistry: ExamManifest[] = [
   amsUmlManifest,
   tsiManifest,
+  tehnologiiWebManifest,
 ];
 
 // ---- Question loaders (lazy, per-exam) ------------------------------------
@@ -20,6 +22,8 @@ const loaders: Record<string, QuestionLoader> = {
     import('./index').then(m => m.allQuestions),
   'tsi': () =>
     import('./tsi-index').then(m => m.tsiAllQuestions),
+  'tehnologii-web': () =>
+    import('./tw-index').then(m => m.twAllQuestions),
 };
 
 /** Load all questions for an exam. Returns [] if examId is unknown. */

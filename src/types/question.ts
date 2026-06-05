@@ -20,7 +20,17 @@ export type Topic =
   | 'criptografie'
   | 'pki'
   | 'disponibilitate'
-  | 'endpoint';
+  | 'endpoint'
+  // Tehnologii Web (frontend) topics
+  | 'fundamente'
+  | 'state-props'
+  | 'hooks'
+  | 'liste-evenimente'
+  | 'router'
+  | 'context'
+  | 'typescript-tooling'
+  | 'async-fetch'
+  | 'backend-deploy';
 
 export interface Question {
   id: string;

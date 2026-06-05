@@ -1,0 +1,58 @@
+import type { Question } from '../types/question';
+
+export const twHooksQuestions: Question[] = [
+  {
+    id: 'tw-hooks-001',
+    topic: 'hooks',
+    difficulty: 'medium',
+    prompt: 'useEffect cu array de dependențe gol [] se execută o singură dată, la montarea componentei.',
+    options: ['Adevărat', 'Fals'],
+    correctIndex: 0,
+    explanation: 'Adevărat. Cu un array de dependențe gol [], efectul rulează o singură dată, după prima randare (la montare). Fără dependențe care să se schimbe, el nu se mai re-execută.',
+  },
+  {
+    id: 'tw-hooks-002',
+    topic: 'hooks',
+    difficulty: 'hard',
+    prompt: 'useEffect fără niciun array de dependențe se execută o singură dată.',
+    options: ['Adevărat', 'Fals'],
+    correctIndex: 1,
+    explanation: 'Fals. Fără array de dependențe, useEffect se execută după FIECARE randare a componentei. Pentru execuție o singură dată se pune un array gol []; pentru execuție condiționată se pun dependențele în array.',
+  },
+  {
+    id: 'tw-hooks-003',
+    topic: 'hooks',
+    difficulty: 'easy',
+    prompt: 'useEffect este hook-ul React pentru gestionarea side effects (fetch, timere, subscripții).',
+    options: ['Adevărat', 'Fals'],
+    correctIndex: 0,
+    explanation: 'Adevărat. useEffect este destinat efectelor secundare (side effects): cereri de date (fetch), timere, abonări la evenimente, manipulări externe — operații care nu țin direct de randarea pură a UI-ului.',
+  },
+  {
+    id: 'tw-hooks-004',
+    topic: 'hooks',
+    difficulty: 'medium',
+    prompt: 'Când se execută useEffect(() => { ... }, [])?',
+    options: ['La fiecare render', 'Niciodată', 'O singură dată, la montare', 'Doar la demontare'],
+    correctIndex: 2,
+    explanation: 'Cu array de dependențe gol [], efectul rulează o singură dată, după montarea componentei. La fiecare render ar rula fără array; doar la demontare rulează funcția de cleanup returnată.',
+  },
+  {
+    id: 'tw-hooks-005',
+    topic: 'hooks',
+    difficulty: 'medium',
+    prompt: 'Rolul funcției cleanup din useEffect (return () => {})?',
+    options: ['Adaugă side effects', 'Curăță resursele la demontare', 'Resetează state-ul', 'Navighează la altă pagină'],
+    correctIndex: 1,
+    explanation: 'Funcția returnată din useEffect este funcția de cleanup: rulează la demontarea componentei (și înainte de re-execuția efectului) pentru a curăța resurse — anularea timerelor, dezabonarea de la evenimente, închiderea conexiunilor.',
+  },
+  {
+    id: 'tw-hooks-006',
+    topic: 'hooks',
+    difficulty: 'medium',
+    prompt: 'De ce creăm un custom hook (useTheme) pentru Context?',
+    options: ['E obligatoriu', 'Simplifică codul + verificare null', 'Reduce bundle size', 'Permite SSR'],
+    correctIndex: 1,
+    explanation: 'Un custom hook (ex: useTheme) ascunde apelul useContext și poate verifica dacă valoarea contextului există (aruncând o eroare clară dacă este folosit în afara Provider-ului). Simplifică consumul contextului și evită codul repetitiv. Nu este obligatoriu și nu afectează bundle size sau SSR.',
+  },
+];
