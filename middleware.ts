@@ -10,7 +10,9 @@ export default function middleware(request: Request): Response | undefined {
   const match = cookieHeader.match(/(?:^|;\s*)tsi-auth=([^;]+)/);
   const token = match?.[1];
 
-  if (token && token === process.env.AUTH_TOKEN) {
+  // .trim() consistent cu api/login.ts (vezi nota de acolo).
+  const authToken = process.env.AUTH_TOKEN?.trim();
+  if (token && authToken && token === authToken) {
     return undefined; // allow
   }
 

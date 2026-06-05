@@ -141,7 +141,7 @@
 
       <div class="error" id="err">
         <span>⚠️</span>
-        <span>Parolă incorectă. Încearcă din nou.</span>
+        <span class="error-text">Parolă incorectă. Încearcă din nou.</span>
       </div>
 
       <button type="submit">Intră în platformă →</button>
@@ -152,7 +152,13 @@
 
   <script>
     const params = new URLSearchParams(location.search);
-    if (params.get('error')) {
+    const err = params.get('error');
+    if (err === 'config') {
+      const box = document.getElementById('err');
+      box.querySelector('.error-text').textContent =
+        'Server neconfigurat: lipsesc variabilele APP_PASSWORD / AUTH_TOKEN pe Vercel.';
+      box.classList.add('visible');
+    } else if (err) {
       document.getElementById('err').classList.add('visible');
     }
   </script>
