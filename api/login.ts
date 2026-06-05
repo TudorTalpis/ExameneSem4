@@ -6,8 +6,10 @@ export default async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const origin = url.origin;
 
-  const appPassword = process.env.APP_PASSWORD;
-  const authToken = process.env.AUTH_TOKEN;
+  // .trim() => o variabilă lipită cu newline/spațiu la final (greșeală frecventă
+  // în dashboard-ul Vercel) nu mai strică potrivirea parolei sau cookie-ul.
+  const appPassword = process.env.APP_PASSWORD?.trim();
+  const authToken = process.env.AUTH_TOKEN?.trim();
 
   // --- Diagnostic temporar -------------------------------------------------
   // Verifică dacă variabilele de mediu ajung în runtime-ul deployment-ului,
@@ -45,7 +47,10 @@ export default async function handler(request: Request): Promise<Response> {
       status: 302,
       headers: {
         'Location': origin + '/',
-        'Set-Cookie': `tsi-auth=${authToken}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800`,
+        // SameSite=Lax (nu Strict): cookie-ul de sesiune trebuie trimis pe
+        // redirect-ul top-level după login; cu Strict browserul îl reține și
+        // utilizatorul rămâne „delogat" (e respins de middleware).
+        'Set-Cookie': `tsi-auth=${authToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`,
       },
     });
   }
