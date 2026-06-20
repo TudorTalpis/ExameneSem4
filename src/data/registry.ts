@@ -3,6 +3,7 @@ import type { Question } from '../types/question';
 import { amsUmlManifest } from './exams/ams-uml/manifest';
 import { tsiManifest } from './exams/tsi/manifest';
 import { tehnologiiWebManifest } from './exams/tehnologii-web/manifest';
+import { stefaniniManifest } from './exams/stefanini-tse-l2/manifest';
 
 // ---- Exam registry -------------------------------------------------------
 // To add a new exam: create src/data/exams/<id>/manifest.ts and add it here.
@@ -11,6 +12,7 @@ export const examRegistry: ExamManifest[] = [
   amsUmlManifest,
   tsiManifest,
   tehnologiiWebManifest,
+  stefaniniManifest,
 ];
 
 // ---- Question loaders (lazy, per-exam) ------------------------------------
@@ -24,6 +26,8 @@ const loaders: Record<string, QuestionLoader> = {
     import('./tsi-index').then(m => m.tsiAllQuestions),
   'tehnologii-web': () =>
     import('./tw-index').then(m => m.twAllQuestions),
+  'stefanini-tse-l2': () =>
+    import('./stef-index').then(m => m.stefAllQuestions),
 };
 
 /** Load all questions for an exam. Returns [] if examId is unknown. */

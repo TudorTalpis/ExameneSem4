@@ -33,7 +33,18 @@ export type Topic =
   | 'backend-deploy'
   // Tehnologii Web (backend .NET / EF Core) topics
   | 'backend-efcore'
-  | 'backend-arhitectura';
+  | 'backend-arhitectura'
+  // Stefanini TSE L2 topics
+  | 'stef-linux'
+  | 'stef-sql'
+  | 'stef-appsupport'
+  | 'stef-networking'
+  | 'stef-monitoring'
+  | 'stef-php'
+  | 'stef-messaging'
+  | 'stef-mongodb'
+  | 'stef-cloud'
+  | 'stef-customer';
 
 /**
  * 'mcq'   – clasic: alegi o opțiune (inclusiv analiză A/B și completare cod).
