@@ -1,0 +1,1309 @@
+[
+  {
+    "id": 1,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Critical",
+    "question": "Explain the Linux permission model. Walk me through what 'rwxr-xr--' means and how you would interpret and change it with chmod.",
+    "answer": "Linux permissions are split across three identities: the owning user, the owning group, and others, each with read (r=4), write (w=2), and execute (x=1) bits. In a listing like '-rwxr-xr--', the leading character is the file type (- for a regular file, d for directory, l for symlink), then three triplets: owner has rwx (7), group has r-x (5), others have r-- (4), so the octal mode is 754. You change it either symbolically, e.g. 'chmod g+w file' to add group write or 'chmod o-r file' to remove read from others, or numerically with 'chmod 644 file'. On a directory the execute bit means 'can traverse/enter it', so a directory typically needs x to be useful even for reading its contents via paths. Ownership is changed separately with 'chown user:group file' and 'chgrp'. You inspect current values with 'ls -l' for the mode and 'stat file' for a fuller view including numeric mode and timestamps.",
+    "followUps": [
+      "What does the execute bit mean on a directory versus a file?",
+      "How do umask values affect the default permissions of newly created files?",
+      "What is the difference between chmod and chown?"
+    ]
+  },
+  {
+    "id": 2,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What are the special permission bits setuid, setgid, and the sticky bit, and where would you actually see each one in practice?",
+    "answer": "These are three extra bits layered on top of the standard rwx model. Setuid (octal 4000, shown as 's' in the owner execute position) makes an executable run with the file owner's privileges rather than the caller's; the classic example is /usr/bin/passwd, which needs root to write /etc/shadow. Setgid (octal 2000, 's' in the group execute position) on an executable runs it with the file's group, and on a directory it makes new files inherit that directory's group instead of the creator's primary group, which is handy for shared project directories. The sticky bit (octal 1000, shown as 't' in the others execute position) on a directory like /tmp means only the file's owner (or root) can delete or rename files in it, even though everyone can write there. You set them with chmod, e.g. 'chmod 4755', 'chmod 2775', or 'chmod 1777', or symbolically with u+s, g+s, and +t. A capital 'S' or 'T' instead of lowercase means the bit is set but the underlying execute bit is not, which is usually a misconfiguration to flag.",
+    "followUps": [
+      "Why is setuid on a shell script generally ignored or unsafe on Linux?",
+      "How would you find all setuid binaries on a system, and why might that matter for security?",
+      "What does a capital 'S' in the permission string indicate?"
+    ]
+  },
+  {
+    "id": 3,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Critical",
+    "question": "A systemd service won't start. Walk me through the exact commands you'd run to restart it and diagnose why it failed.",
+    "answer": "First I check current state with 'systemctl status <service>', which shows whether it's active/failed, the main PID, the most recent log lines, and the result code. I attempt a restart with 'sudo systemctl restart <service>' and re-check status. If it failed, I read the full logs with 'journalctl -u <service> -e' (jump to the end) or '-b' to scope to the current boot, and '-f' to follow live while I retry. I look at the 'Active:' line and especially the exit code or signal in the 'Process:' / 'Main PID' lines (e.g. status=1, status=203/EXEC for a bad ExecStart path, or 226/NAMESPACE for sandboxing issues). I verify the unit file with 'systemctl cat <service>' to confirm ExecStart, User, WorkingDirectory, and environment, and run 'systemd-analyze verify <unit>' to catch syntax errors. If I edited a unit on disk I must run 'sudo systemctl daemon-reload' before the change takes effect. Finally, 'systemctl is-enabled <service>' tells me whether it will come back on boot, which I'd fix with 'systemctl enable --now'.",
+    "followUps": [
+      "What's the difference between 'systemctl restart' and 'systemctl reload'?",
+      "When and why must you run 'systemctl daemon-reload'?",
+      "What does exit status 203/EXEC typically indicate?"
+    ]
+  },
+  {
+    "id": 4,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain how systemd works at a high level: what a unit is, the main unit types, and how targets replace old runlevels.",
+    "answer": "systemd is the init system and service manager that runs as PID 1, responsible for bringing up the rest of userspace, managing services, and handling dependencies in parallel rather than sequentially like old SysV init. The core abstraction is a 'unit', a declarative description of something systemd manages, identified by a suffix: .service for daemons, .socket for socket activation, .timer for scheduled jobs (a cron alternative), .mount and .automount for filesystems, .target for grouping units, .path for path-based activation, and .device. Units declare relationships with directives like Wants=, Requires=, Before=, and After=, and systemd computes a dependency graph and starts everything it safely can in parallel. Targets are synchronization points that replace runlevels: multi-user.target is roughly the old runlevel 3 (multi-user, no GUI), graphical.target is runlevel 5, and you switch the default with 'systemctl set-default'. Unit files live in /usr/lib/systemd/system (packaged), /etc/systemd/system (admin overrides, highest precedence), and runtime ones in /run. You inspect them with 'systemctl cat', list active ones with 'systemctl list-units', and see the boot dependency ordering with 'systemctl list-dependencies'.",
+    "followUps": [
+      "What is the practical difference between Wants= and Requires=?",
+      "How do Before= and After= differ from dependency directives like Requires=?",
+      "Where would you put a drop-in override instead of editing the shipped unit file?"
+    ]
+  },
+  {
+    "id": 5,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "A service keeps flapping: it starts, dies after a few seconds, and systemd keeps restarting it. How do you diagnose and stop the loop to investigate?",
+    "answer": "Flapping usually means Restart=always (or on-failure) in the unit combined with a process that exits quickly. I confirm with 'systemctl status' (it shows repeated start attempts and possibly 'start request repeated too quickly') and watch 'journalctl -u <service> -f' to capture the death cause each cycle, looking for exit codes, stack traces, or 'Failed with result'. systemd has rate limiting via StartLimitIntervalSec and StartLimitBurst; if it trips, the unit lands in a failed state and I clear it with 'systemctl reset-failed <service>'. To investigate calmly I stop the auto-restart: temporarily override Restart=no with 'systemctl edit <service>' (a drop-in) and daemon-reload, or just 'systemctl stop' and run the ExecStart command manually in the foreground as the configured user to see real output. Common root causes are a missing dependency or config file, wrong WorkingDirectory or permissions, a port already in use, an OOM kill (check 'journalctl -k' for the OOM message), or the process daemonizing while Type=simple expects it to stay in the foreground (a Type mismatch). I also check resource limits and that any After= dependencies like the database are actually up before this service starts.",
+    "followUps": [
+      "What do StartLimitIntervalSec and StartLimitBurst control, and how do you reset after hitting the limit?",
+      "How would a Type=forking vs Type=simple mismatch cause restart problems?",
+      "How can you tell from the logs whether the kernel OOM killer terminated the process?"
+    ]
+  },
+  {
+    "id": 6,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Critical",
+    "question": "How do you read logs on a modern systemd Linux system? Compare journalctl with the files under /var/log.",
+    "answer": "On systemd systems the primary log store is the journal, queried with journalctl, while many services and older daemons also write plain text into /var/log. With journalctl I scope by unit using 'journalctl -u nginx', by boot with '-b' (current) or '-b -1' (previous boot), follow live with '-f', jump to the end with '-e', and filter by time with '--since \"10 min ago\"' or '--since today --until \"1 hour ago\"'. I filter by priority with '-p err' (or warning/crit) and by kernel messages with '-k' (equivalent to dmesg). Under /var/log the key files are /var/log/syslog or /var/log/messages (general system), /var/log/auth.log or /var/log/secure (authentication and sudo), and application directories like /var/log/nginx/. For text files I use less, grep, and tail -f. A key gotcha is that the journal may be volatile (stored in /run and lost on reboot) unless persistent storage is enabled via Storage=persistent in journald.conf and /var/log/journal exists, which is why I check both sources.",
+    "followUps": [
+      "How do you view only the previous boot's logs, and how do you confirm the journal is persistent?",
+      "Which log file would you check first for failed SSH logins?",
+      "How do you filter the journal by priority level or a specific time window?"
+    ]
+  },
+  {
+    "id": 7,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A server is reporting high CPU usage. Walk me through your triage from the moment you log in.",
+    "answer": "I start with a live overview using 'top' or, preferably, 'htop', and immediately press to sort by %CPU to find the offending process(es). I read the load average from 'uptime' or top's header and compare it to the core count from 'nproc'; a load of 8 on an 8-core box is fully busy, on a 2-core box it's heavily overloaded. I look at the CPU breakdown in top: high %us (user) points to application/compute, high %sy (system) to kernel/syscalls, high %wa (I/O wait) means CPU is actually blocked on disk rather than compute, and high %si or %hi points to interrupt/softirq load. To see which thread inside a process is hot I use 'top -H -p <pid>' or 'ps -eLf'. I'll run 'pidstat 1' or 'mpstat -P ALL 1' to watch per-CPU and per-process usage over a few seconds rather than a single snapshot. Once I've identified the process I decide whether to renice it ('renice'), throttle it, or kill it, and I correlate with logs and recent changes (a deploy, a cron job, a runaway loop) to find the root cause rather than just killing it.",
+    "followUps": [
+      "What does a high %wa (I/O wait) value tell you, and where would you look next?",
+      "How do you find which specific thread within a multi-threaded process is consuming CPU?",
+      "How should you interpret a load average relative to the number of CPU cores?"
+    ]
+  },
+  {
+    "id": 8,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "The system is low on memory and processes are getting killed. Explain the OOM killer, how to confirm it acted, and how to investigate memory usage.",
+    "answer": "When the kernel cannot reclaim enough memory to satisfy allocations, the Out-Of-Memory (OOM) killer picks a process to terminate to keep the system alive, sending it SIGKILL. I confirm it fired by checking kernel logs with 'dmesg -T | grep -i oom' or 'journalctl -k | grep -i 'killed process'', which prints the chosen PID, its name, and an oom_score summary of memory users. The victim is chosen largely by the oom_score, which is influenced by memory footprint and tunable via /proc/<pid>/oom_score_adj (a negative value protects a process, positive makes it more likely to be killed). To investigate usage I use 'free -h' (watching available, not just free, and checking swap), 'top'/'htop' sorted by %MEM, and 'ps aux --sort=-%mem | head'. I distinguish RSS (resident, actually in RAM) from VIRT (virtual, often overcommitted and not all resident). Common fixes are adding RAM or swap, fixing a memory leak in the offending app, setting memory limits via systemd (MemoryMax=) or cgroups, and checking vm.overcommit settings; for a service repeatedly killed, capping it or tuning oom_score_adj can protect critical processes.",
+    "followUps": [
+      "What's the difference between RSS and VIRT, and why can VIRT be misleading?",
+      "How does oom_score_adj let you protect a critical process from the OOM killer?",
+      "Why might 'free' show little 'free' memory but plenty of 'available', and is that a problem?"
+    ]
+  },
+  {
+    "id": 9,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "'df' says the root filesystem is 100% full. Walk me through finding what's eating the space.",
+    "answer": "First I confirm which filesystem is full with 'df -h', noting the mount point, because /var or /home may be separate from /. I then drill into the offending mount with 'du -xh --max-depth=1 /var | sort -h' (the -x keeps du on one filesystem so it doesn't wander into other mounts), repeating into the largest subdirectory to walk down to the culprit; 'ncdu' is a faster interactive alternative. Typical offenders are runaway log files in /var/log (often fixable with logrotate or truncation), old package caches, container/image layers under /var/lib/docker, core dumps, or large temp files. Before deleting anything I check the largest files directly with 'find /var -xdev -type f -size +500M -exec ls -lh {} \\;'. A classic trap is that df shows full but du finds nothing: that points to space held by deleted-but-still-open files, which I track with 'lsof +L1' or 'lsof | grep deleted' and reclaim by restarting the process holding the handle. I also distinguish a full filesystem (no blocks) from inode exhaustion, which 'df -i' reveals, since both report write failures but have different fixes.",
+    "followUps": [
+      "df shows 100% full but du adds up to far less. What's happening and how do you fix it?",
+      "How would you detect and resolve inode exhaustion?",
+      "Why is the -x (or -xdev) flag important when running du or find during this investigation?"
+    ]
+  },
+  {
+    "id": 10,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "Explain the deleted-but-open-file problem: why does space stay used after you 'rm' a large log, and how do you reclaim it without rebooting?",
+    "answer": "On Linux a file's data blocks are only freed when its last reference is gone, and that includes open file descriptors, not just directory entries (links). If a process such as a daemon has a log file open and someone runs 'rm' on it, the directory entry is removed so 'du' and 'ls' no longer see it, but the inode and its blocks persist as long as the process holds the descriptor, so 'df' still shows the space consumed. This is why a freshly cleaned-looking disk can stay full. I diagnose it with 'lsof +L1' (lists open files with a link count below 1, i.e. unlinked) or 'lsof | grep -i deleted', which shows the holding PID, the file, and its size; you can also see the descriptor under /proc/<pid>/fd as a symlink marked '(deleted)'. The clean fix is to restart or signal the process to reopen its files (for logs, a logrotate setup with copytruncate or a reload signal avoids this entirely). If you cannot restart it, you can reclaim space in place by truncating through the descriptor, e.g. ': > /proc/<pid>/fd/<n>', which zeroes the still-open file without breaking the handle.",
+    "followUps": [
+      "How can you reclaim the space without restarting the process at all?",
+      "How does logrotate's copytruncate option relate to this problem?",
+      "Where under /proc can you see a process's open file descriptors, including deleted ones?"
+    ]
+  },
+  {
+    "id": 11,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "'df -h' shows plenty of free space, yet writes fail with 'No space left on device'. What's going on and how do you confirm it?",
+    "answer": "The most common explanation is inode exhaustion: a filesystem tracks files via a fixed pool of inodes allocated at creation time, and if you have millions of tiny files (mail spools, session files, cache fragments) you can run out of inodes while blocks remain free, so any new file creation fails even though 'df -h' (which shows blocks) looks fine. I confirm with 'df -i', which reports IUse% per filesystem; 100% there is the smoking gun. To find the offender I locate directories with huge file counts, e.g. 'for d in /var/*; do echo \"$(find \"$d\" -xdev | wc -l) $d\"; done | sort -n', then drill in and clean up or archive the small files. Other causes of the same error to keep in mind: a process holding a deleted file (df full but du empty, found with lsof +L1), reserved blocks for root leaving non-root writes failing, a filesystem mounted read-only after errors (check 'mount' and dmesg), or hitting a quota limit ('repquota'/'quota'). On ext filesystems the inode count is fixed at mkfs time, so the real fix is cleanup or recreating/resizing the filesystem; XFS allocates inodes dynamically and rarely hits this.",
+    "followUps": [
+      "Which command distinguishes inode exhaustion from a block-full filesystem?",
+      "Why can ext4 hit inode exhaustion but XFS usually does not?",
+      "What other conditions can produce 'No space left on device' besides full blocks and inodes?"
+    ]
+  },
+  {
+    "id": 12,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Critical",
+    "question": "Explain the difference between SIGTERM and SIGKILL, and how this maps to 'kill', 'kill -9', and systemctl stop.",
+    "answer": "Signals are how Linux asks processes to do something; the two most common for stopping a process are SIGTERM (15) and SIGKILL (9). SIGTERM is the polite default sent by plain 'kill <pid>': it requests termination but the process can catch it, flush buffers, close files, finish in-flight work, and exit cleanly, which is what you almost always want first. SIGKILL ('kill -9 <pid>') cannot be caught, blocked, or ignored; the kernel destroys the process immediately, so it skips cleanup and risks data loss or leftover lock/temp files, making it a last resort when a process is truly stuck. There's also SIGHUP (1), traditionally used to tell a daemon to reload its configuration, and SIGINT (2), what Ctrl+C sends. systemctl stop sends SIGTERM and, after TimeoutStopSec, escalates to SIGKILL automatically (configurable via KillSignal and KillMode). The correct escalation pattern is: try SIGTERM, give it a few seconds, and only then use SIGKILL if it hasn't exited; a process stuck in uninterruptible sleep (state D, usually blocked on I/O) won't die even from SIGKILL until the I/O completes.",
+    "followUps": [
+      "Why can a process in uninterruptible sleep (state D) ignore even SIGKILL?",
+      "What is SIGHUP commonly used for with long-running daemons?",
+      "How does systemctl stop decide when to escalate from SIGTERM to SIGKILL?"
+    ]
+  },
+  {
+    "id": 13,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "How do you find and manage processes? Cover listing, finding a process by name or port, and inspecting parent/child relationships.",
+    "answer": "For a snapshot I use 'ps aux' (BSD style) or 'ps -ef' (System V style) and pipe to grep, but 'pgrep -a <name>' is cleaner for finding PIDs by name and 'pgrep -f' matches the full command line. For a live, interactive view I use 'top' or 'htop', where I can sort, filter, and send signals directly. To map a process to a listening port I use 'sudo ss -tlnp' (or the older 'netstat -tlnp') and read the users:((\"proc\",pid=...)) column, or go the other way with 'sudo lsof -i :443' to see what holds a port. Parent/child structure comes from 'pstree -p' or 'ps -ejH', which matters when you need to kill a whole tree or find what spawned a runaway child. To act on processes by name I use 'pkill <name>' or 'killall <name>' (sending SIGTERM by default), and I inspect a specific process's open files and limits via /proc/<pid>/ (status, limits, fd, cwd, environ). I also check process state in ps output: R running, S sleeping, D uninterruptible sleep, Z zombie, T stopped.",
+    "followUps": [
+      "How do you find which process is listening on a given TCP port?",
+      "What does a zombie (Z) process mean, and how do you get rid of one?",
+      "What's the difference between pkill and killall, and what signal do they send by default?"
+    ]
+  },
+  {
+    "id": 14,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "Give a high-level walkthrough of the Linux boot sequence from power-on to login prompt.",
+    "answer": "At power-on the firmware runs first: legacy BIOS or modern UEFI does POST (power-on self test) and hands off to a bootloader from disk (or, on UEFI, an EFI application from the EFI System Partition). The bootloader, typically GRUB2, presents the menu, loads the selected kernel (vmlinuz) and the initramfs into memory, and passes kernel command-line parameters. The kernel initializes hardware, mounts the initramfs as a temporary root, and loads the drivers/modules needed to find and mount the real root filesystem (e.g. storage and LVM/RAID modules). It then pivots to the real root and starts PID 1, which on modern distros is systemd. systemd reads its default target (commonly multi-user.target or graphical.target), resolves the unit dependency graph, and brings up mounts, sockets, and services in parallel until the target is reached, ending at a getty login prompt or a display manager. Useful diagnostics along the way are 'systemd-analyze' and 'systemd-analyze blame' to see what slowed boot, 'journalctl -b' for this boot's logs, and 'dmesg' for the kernel's early ring-buffer messages.",
+    "followUps": [
+      "What is the initramfs (or initrd) for, and why is it needed before the real root is mounted?",
+      "Which commands help you analyze what made a boot slow?",
+      "Where does systemd take over, and how does it decide what to start?"
+    ]
+  },
+  {
+    "id": 15,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "A cron job didn't run as expected. What are the most common reasons, and how do you systematically debug it?",
+    "answer": "Cron failures are usually one of a few well-known traps. First, the environment: cron runs with a minimal PATH and almost no environment variables, so a command that works in your interactive shell may fail because a binary isn't found or HOME isn't set; the fix is to use absolute paths and set needed variables in the crontab. Second, the schedule itself: I re-read the five time fields (minute, hour, day-of-month, month, day-of-week) since DOM and DOW combine with OR logic when both are specified, which trips people up. Third, which crontab: a user crontab ('crontab -l -u user'), /etc/crontab, or files in /etc/cron.d each have different formats (system-wide ones include a username field), and the job may simply be in the wrong place. Fourth, output and errors: cron emails stdout/stderr to the user by default, but mail is often unconfigured, so I add explicit logging like '>> /var/log/myjob.log 2>&1' to capture what happened. I confirm cron even tried by checking 'journalctl -u cron' (or /var/log/syslog / /var/log/cron) for the execution line, verify the daemon is running with 'systemctl status cron', and check the script's own permissions (it must be executable) and any % characters in the command (which cron treats as newlines unless escaped).",
+    "followUps": [
+      "Why does a command work from your shell but fail under cron, and how do you fix the PATH/environment issue?",
+      "How do you confirm cron actually attempted to run the job?",
+      "What does an unescaped % sign do in a crontab command line?"
+    ]
+  },
+  {
+    "id": 16,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Medium",
+    "question": "What is the crontab format, and what's the difference between a user crontab, /etc/crontab, and /etc/cron.d?",
+    "answer": "A crontab line has five time-and-date fields followed by the command: minute (0-59), hour (0-23), day of month (1-31), month (1-12), and day of week (0-7, where both 0 and 7 are Sunday), then the command to run. Fields accept lists (1,15), ranges (1-5), steps (*/10 meaning every 10 units), and '*' for 'every'. There are also shorthand macros like @daily, @hourly, @reboot, and @weekly. A user crontab is edited with 'crontab -e' and managed per user with 'crontab -l' / 'crontab -r'; it has no username field because it always runs as that user. By contrast /etc/crontab and the drop-in files in /etc/cron.d are system crontabs and add a sixth field, the username the job runs as, between the schedule and the command. Convenience directories /etc/cron.daily, cron.hourly, cron.weekly, and cron.monthly hold executable scripts (not crontab lines) that run on those cadences, typically driven by run-parts. On many modern systems systemd timers are an increasingly common alternative, offering logging via the journal and dependency awareness.",
+    "followUps": [
+      "How would you schedule a job to run every 15 minutes during business hours only?",
+      "What does the @reboot macro do?",
+      "What advantages do systemd timers have over cron?"
+    ]
+  },
+  {
+    "id": 17,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Which networking commands do you reach for on a modern Linux box, and what does each tell you? Cover the ip and ss family specifically.",
+    "answer": "On modern systems the iproute2 suite replaces the deprecated net-tools (ifconfig, netstat, route, arp). I use 'ip addr' (or 'ip a') to see interface IPs and state, 'ip link' for layer-2/interface up-down status and MAC addresses, 'ip route' to view the routing table and default gateway, and 'ip neigh' for the ARP/neighbor cache. For sockets and connections I use 'ss' instead of netstat: 'ss -tlnp' lists listening TCP sockets with the owning process (t=TCP, l=listening, n=numeric, p=process), 'ss -tunap' adds UDP and all states, and 'ss -s' gives a summary of socket counts. For name resolution I use 'dig' (e.g. 'dig +short example.com' or 'dig A example.com @8.8.8.8' to query a specific server) rather than the less detailed nslookup, and I check /etc/resolv.conf and 'resolvectl status' for the configured resolvers. To test reachability and HTTP I use 'ping' for ICMP, 'curl -v https://host' (or 'curl -I' for headers only) to validate an actual HTTP request including TLS, and 'traceroute'/'mtr' to see the hop-by-hop path. This combination lets me separate a DNS problem from a routing problem from an application problem quickly.",
+    "followUps": [
+      "Why has ss replaced netstat, and what do the flags in 'ss -tlnp' mean?",
+      "How do you check the default gateway and the full routing table?",
+      "When would you use curl -v over a simple ping?"
+    ]
+  },
+  {
+    "id": 18,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "A user says 'I can't reach the web service on this host.' How do you isolate whether it's DNS, network/routing, the listener, or the application?",
+    "answer": "I work the stack methodically so I can localize the fault. First DNS: 'dig +short service.example.com' confirms the name resolves and to the IP I expect; if it fails I check /etc/resolv.conf and 'resolvectl status'. Next basic reachability to the resolved IP: 'ping <ip>' for ICMP (noting many hosts block ICMP, so a failure isn't conclusive) and 'traceroute'/'mtr <ip>' to see where the path breaks if it's a routing/firewall issue. Then the transport layer to the actual port: 'curl -v telnet://<ip>:443' or 'nc -vz <ip> 443' tells me whether the TCP port is open, refused (nothing listening / port closed), or timing out (firewall dropping). On the server itself I confirm something is actually listening with 'sudo ss -tlnp | grep :443' and that it's bound to the right address (0.0.0.0 vs 127.0.0.1 matters a lot). I check firewalls with 'sudo iptables -L -n' or 'sudo firewalld'/'nft list ruleset', and any cloud security groups. Finally the application layer: 'curl -v https://service' to see the real HTTP response, TLS handshake, and status code, plus the service's own logs via 'journalctl -u <service>'. Connection refused vs timeout vs reset are distinct clues: refused means reached host but no listener/blocked locally, timeout usually means a firewall dropping packets, and a TLS or 5xx error means the app is up but misbehaving.",
+    "followUps": [
+      "What's the practical difference between 'connection refused' and 'connection timed out'?",
+      "Why does it matter whether a service is bound to 127.0.0.1 versus 0.0.0.0?",
+      "How would you rule out a firewall or cloud security group as the cause?"
+    ]
+  },
+  {
+    "id": 19,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "At a high level, what is tcpdump and when would you use it? Give an example invocation and explain what you'd look for.",
+    "answer": "tcpdump is a command-line packet capture and analysis tool that puts an interface into promiscuous capture and shows the actual packets crossing the wire, which is the tool of last resort when higher-level tools (curl, ss, logs) can't tell you why traffic isn't flowing. I reach for it to confirm whether packets even arrive, to see TCP handshakes (SYN, SYN-ACK, ACK), retransmissions, RSTs, or to verify a firewall is silently dropping traffic. A typical invocation is 'sudo tcpdump -i eth0 -nn host 10.0.0.5 and port 443', where -i selects the interface, -nn disables DNS and port-name resolution so it's fast and unambiguous, and the BPF filter expression ('host ... and port ...') limits the noise; I often add '-c 100' to cap packets or '-w capture.pcap' to save for later analysis in Wireshark. Reading the output, I look for whether a SYN gets a SYN-ACK (no reply suggests a drop or no listener), repeated SYNs (no path back), immediate RST (port closed/refused), or lots of retransmissions (loss/latency). Because captures are sensitive and can be high-volume, I always scope them tightly with filters and never run an unfiltered capture on a busy production interface longer than necessary.",
+    "followUps": [
+      "What does it mean if you see SYN packets going out but no SYN-ACK coming back?",
+      "Why do you almost always pass -nn, and what does a tight BPF filter buy you?",
+      "How would you hand a capture off for deeper analysis?"
+    ]
+  },
+  {
+    "id": 20,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "Critical",
+    "question": "Someone reports 'this Linux server is slow.' Give me your structured, top-down methodology for diagnosing it.",
+    "answer": "I treat 'slow' as a symptom and localize it to a resource using the USE-style approach (Utilization, Saturation, Errors) across CPU, memory, disk I/O, and network. First a 60-second overview: 'uptime' for load average trend vs 'nproc' cores, 'top'/'htop' to see CPU split and top consumers, 'free -h' for memory and swap pressure, and 'dmesg -T | tail' / 'journalctl -k' for kernel errors like OOM kills or disk faults. Then I go per-resource: CPU with 'mpstat -P ALL 1' and 'pidstat 1' (separating user vs system vs I/O wait); memory by checking whether the box is swapping ('vmstat 1' si/so columns, high swap is a red flag); disk with 'iostat -xz 1' watching %util near 100% and high await (slow disk), plus 'iotop' for the offending process; and network with 'ss -s', interface stats, and 'sar -n DEV'. A crucial early branch is high I/O wait in top, which means the CPU is idle but blocked on disk, redirecting me to storage rather than compute. I correlate findings with recent changes (deploys, cron jobs, traffic spikes) and the service logs, form a hypothesis, confirm it (e.g. identify the exact process and what it's doing via strace or its logs), and only then remediate. The discipline is measure before acting, change one thing at a time, and verify the metric actually improved rather than assuming.",
+    "followUps": [
+      "If top shows low CPU but the box still feels slow, which resource do you suspect and how do you confirm it?",
+      "What do the si/so columns in vmstat tell you, and why is swapping bad for latency?",
+      "Which iostat columns indicate a saturated or slow disk?"
+    ]
+  },
+  {
+    "id": 21,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "Distinguish high I/O wait, swapping, and disk saturation as causes of slowness. Which tools and metrics separate them?",
+    "answer": "These three often masquerade as generic 'slowness' but have distinct signatures. High I/O wait shows up as a large %wa in 'top'/'mpstat': the CPU is idle but blocked waiting for I/O to complete, telling me the bottleneck is downstream (disk or sometimes network filesystem), not compute. Swapping (memory pressure) is seen in 'vmstat 1' as sustained nonzero si (swap-in) and so (swap-out) columns and in 'free -h' as used swap climbing; when the system pages anonymous memory to disk, latency spikes because RAM-speed accesses become disk-speed, and it can cascade into more I/O wait. Disk saturation is best seen in 'iostat -xz 1': %util approaching 100% means the device is busy nearly all the time, while a high 'await' (average I/O service time in ms) and growing 'aqu-sz' (queue depth) indicate requests are queuing; 'iotop' then names the process generating the I/O. The interplay matters: swapping causes disk I/O, which raises %util and %wa, so I trace the chain back to the root: if swap is active, the real problem is memory; if there's no swapping but %util is pegged with high await, it's genuine disk saturation from an I/O-heavy workload. Confirming the originating process with iotop or pidstat -d keeps me from fixing the symptom instead of the cause.",
+    "followUps": [
+      "How can swapping show up as I/O wait, and how do you tell which is the root cause?",
+      "Which iostat field best indicates the disk itself is slow versus just busy?",
+      "How do you identify the specific process generating heavy disk I/O?"
+    ]
+  },
+  {
+    "id": 22,
+    "category": "Technical - Linux",
+    "difficulty": "Easy",
+    "importance": "Medium",
+    "question": "How do you inspect and temporarily change a network interface, and how do you make a configuration change persistent across reboots?",
+    "answer": "To inspect, I use 'ip addr show' for IPs and interface state, 'ip link show' for up/down status and MAC, and 'ip route show' for the routing table and default gateway. For temporary, runtime-only changes (lost on reboot or network restart) I use iproute2 directly: 'sudo ip addr add 192.168.1.50/24 dev eth0' to add an address, 'sudo ip link set eth0 up' (or down) to toggle the link, and 'sudo ip route add default via 192.168.1.1' to set a gateway. These are great for testing but vanish, so for persistence I edit the distro's network configuration layer rather than ip commands. On Ubuntu that's Netplan YAML under /etc/netplan/ applied with 'sudo netplan apply'; on RHEL/CentOS it's NetworkManager via 'nmcli' (e.g. 'nmcli con mod') or files under /etc/NetworkManager/ (and historically /etc/sysconfig/network-scripts/ifcfg-*). After editing I apply and verify with 'ip addr' and a connectivity test like 'ping' or 'curl'. The key concept to state in an interview is the distinction between a runtime change (ip commands, immediate but ephemeral) and a persistent change (the configuration files/tools, which survive reboot).",
+    "followUps": [
+      "Which tool manages persistent network config on Ubuntu versus RHEL-family systems?",
+      "Why do changes made with 'ip addr add' not survive a reboot?",
+      "How would you verify a new IP or route actually took effect?"
+    ]
+  },
+  {
+    "id": 23,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "A user gets 'Permission denied' trying to access a file they believe they should be able to read. How do you debug it end to end?",
+    "answer": "I start by reproducing it as that user and inspecting the target with 'ls -l <file>' and 'stat <file>' to see the owner, group, and mode, and 'id <user>' to see the user's UID and group memberships, then compare: does the user match the owner, are they in the owning group, or must they fall back to 'other' permissions? A subtle but common cause is the directory path: read on a file is useless if the user lacks execute (traverse) permission on a parent directory, so I check every component with 'namei -l /full/path/to/file', which prints the permissions of each path element. If standard bits look fine, I check for Access Control Lists with 'getfacl <file>', since an ACL can grant or deny beyond the basic mode (a '+' after the mode in ls -l signals ACLs are present). I also consider SELinux or AppArmor: on RHEL-family systems a denial despite correct permissions often shows in 'ausearch -m avc' or 'journalctl' as an AVC denial, fixed with the right context via 'restorecon' or a policy adjustment, and 'getenforce' tells me if SELinux is enforcing. Finally I rule out the filesystem being mounted read-only ('mount | grep <fs>') or immutable attributes ('lsattr <file>' showing an 'i' flag). The fix follows the cause: chmod/chown for bits, usermod -aG for group membership, setfacl for ACLs, or an SELinux context correction.",
+    "followUps": [
+      "How can directory traversal (execute) permissions cause a denial even when the file's own mode looks correct?",
+      "How would you detect that an ACL or SELinux context, rather than standard bits, is responsible?",
+      "What does a '+' at the end of the permission string in 'ls -l' indicate?"
+    ]
+  },
+  {
+    "id": 24,
+    "category": "Technical - Linux",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "A systemd service shows as 'active (running)' but clients still can't connect. How do you find the disconnect between 'systemd says it's up' and 'it doesn't actually work'?",
+    "answer": "'active (running)' only means systemd's main process is alive, not that the application is healthy or reachable, so I verify each layer. First I confirm the app is really listening on the expected port and address with 'sudo ss -tlnp | grep <port>'; a frequent gotcha is the service bound to 127.0.0.1 instead of 0.0.0.0, so it's up but unreachable from other hosts. I test locally on the box with 'curl -v http://127.0.0.1:<port>' to separate 'app broken' from 'network broken': if local works but remote fails, the problem is firewall/routing (check 'sudo nft list ruleset' or iptables, plus cloud security groups), whereas if local also fails the app itself is the issue. I read the application's own logs via 'journalctl -u <service> -e' and any app-specific log files, since the process can be running while throwing errors (e.g. failing to reach its database, wrong config, or stuck threads). I check whether it's actually doing work versus hung with 'top -p <pid>', and if needed peek at what it's doing via 'strace -p <pid>' or its open connections with 'ss -tnp'. I also confirm the port the clients use matches what the service binds and that no proxy/load balancer in front is the real failure point. The interview point is that systemd liveness is necessary but not sufficient, so you validate listen address, local reachability, firewall, and application-level health independently.",
+    "followUps": [
+      "Why is binding to 127.0.0.1 versus 0.0.0.0 a common cause of this exact symptom?",
+      "How does testing with curl on localhost help you split an app problem from a network problem?",
+      "What would you add to a unit file so systemd's health reflects real application readiness?"
+    ]
+  },
+  {
+    "id": 25,
+    "category": "Technical - Linux",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "How do you investigate a process that is hung or unresponsive without immediately killing it? What can you learn before deciding what to do?",
+    "answer": "Before killing anything I gather evidence, because the goal is root cause, not just relief. First I check the process state in 'ps -o pid,stat,wchan,cmd -p <pid>' or top: state R is running, S interruptible sleep, D uninterruptible sleep (almost always blocked on I/O, e.g. a dead NFS mount or failing disk), Z zombie (already dead, waiting on its parent to reap it), and T stopped; the 'wchan' shows what kernel function it's blocked in. If it's in state D, no signal including SIGKILL will free it until the underlying I/O completes, which itself is a strong clue to check storage/dmesg. I see what it's currently doing with 'sudo strace -p <pid>' (watch syscalls; a process stuck in a single read/futex/connect call is telling) and which files and sockets it holds via 'sudo lsof -p <pid>' and 'ls -l /proc/<pid>/fd'. I check resource limits in /proc/<pid>/limits, its memory in /proc/<pid>/status, and whether it's waiting on a lock. For a zombie, I don't kill the zombie (it's already dead) but its parent (from 'ps -o ppid'), which needs to call wait(); if the parent is init/systemd the zombie usually clears on its own. Only after understanding the cause do I choose remediation: graceful SIGTERM first, escalate to SIGKILL if safe, fix the blocking dependency (remount storage, restart the upstream service), and capture a core or stack for the app team if it's a recurring hang.",
+    "followUps": [
+      "Why won't even SIGKILL terminate a process stuck in uninterruptible (D) state?",
+      "How do you actually clear a zombie process, and which process do you target?",
+      "What can strace and lsof each tell you about where a process is stuck?"
+    ]
+  },
+  {
+    "id": 26,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain the difference between an INNER JOIN and a LEFT JOIN, and give an example of when you'd use each.",
+    "answer": "An INNER JOIN returns only the rows where the join condition matches in both tables, so unmatched rows on either side are dropped. A LEFT JOIN (LEFT OUTER JOIN) returns every row from the left table and the matched columns from the right table, filling NULL where there is no match. You'd use an INNER JOIN when you only care about records that exist in both sets, for example orders that have a valid customer: SELECT o.id, c.name FROM orders o INNER JOIN customers c ON o.customer_id = c.id. You'd use a LEFT JOIN when you want to keep all rows from the primary table regardless of a match, for example listing all customers including those with zero orders: SELECT c.name, o.id FROM customers c LEFT JOIN orders o ON o.customer_id = c.id. A common reporting use of LEFT JOIN is finding rows with NO match by adding WHERE o.id IS NULL (an anti-join). The choice fundamentally changes the result set size and whether NULLs can appear from the right table.",
+    "followUps": [
+      "What does a RIGHT JOIN do, and how can you always rewrite it as a LEFT JOIN?",
+      "Write a query to find all customers who have never placed an order.",
+      "What happens to the row count if the right table has multiple matches per left row?"
+    ]
+  },
+  {
+    "id": 27,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A developer wrote a LEFT JOIN but the result behaves like an INNER JOIN — unmatched rows are missing. What is the most likely cause?",
+    "answer": "The classic 'LEFT-becomes-INNER' trap is putting a condition on the right (outer) table in the WHERE clause instead of the ON clause. With a LEFT JOIN, unmatched right-side columns are NULL; a WHERE filter like WHERE b.status = 'active' then evaluates NULL = 'active' as UNKNOWN, which is not true, so those NULL-padded rows are silently discarded and you effectively get an INNER JOIN. The fix is to move the right-table predicate into the join condition: ... LEFT JOIN b ON b.a_id = a.id AND b.status = 'active'. Conditions that filter the LEFT table are fine in WHERE because those rows always exist. A safe diagnostic: any non-NULL-safe predicate referencing the outer table in WHERE will collapse the outer join. The exception is an intentional anti-join, where WHERE b.id IS NULL is correct precisely because it keeps only the unmatched rows.",
+    "followUps": [
+      "Where should the b.status filter go if you want to keep all left rows but still filter the right side?",
+      "How would WHERE b.col IS NULL change the meaning versus the same condition in ON?",
+      "Does this same trap apply to RIGHT JOIN and FULL OUTER JOIN?"
+    ]
+  },
+  {
+    "id": 28,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain GROUP BY and HAVING. How does HAVING differ from WHERE?",
+    "answer": "GROUP BY collapses rows that share the same values in the grouping columns into a single summary row, against which you apply aggregate functions like COUNT, SUM, AVG, MIN, and MAX. WHERE filters individual rows before grouping and aggregation happen, while HAVING filters the grouped results after aggregation, so HAVING can reference aggregate functions but WHERE cannot. For example, to list customers with more than five orders: SELECT customer_id, COUNT(*) AS n FROM orders GROUP BY customer_id HAVING COUNT(*) > 5. You'd use WHERE to first narrow the input rows (e.g. WHERE order_date >= '2025-01-01') and HAVING to filter on the computed aggregate. Logically the order is FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY. Putting a row-level filter in HAVING when it could go in WHERE is less efficient because more rows get aggregated than necessary.",
+    "followUps": [
+      "Rewrite a query to filter on order_date in WHERE and on COUNT in HAVING in one statement.",
+      "In standard SQL, can you SELECT a non-aggregated column that isn't in the GROUP BY? What does MySQL do by default?",
+      "For performance, why prefer WHERE over HAVING when the condition isn't on an aggregate?"
+    ]
+  },
+  {
+    "id": 29,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is the difference between COUNT(*), COUNT(column), and COUNT(DISTINCT column)?",
+    "answer": "COUNT(*) counts all rows in the group regardless of NULLs, because it counts rows, not values. COUNT(column) counts only rows where that column is NOT NULL, so NULLs are skipped — this is a frequent source of off-by-N surprises. COUNT(DISTINCT column) counts the number of distinct non-NULL values in that column. For example, given a column with values 1, 1, 2, NULL: COUNT(*) on those four rows is 4, COUNT(col) is 3, and COUNT(DISTINCT col) is 2. In MySQL/InnoDB, COUNT(*) on a whole table is not instantaneous — it scans an index because InnoDB does not keep an exact cached row count like MyISAM did. A practical pitfall is using COUNT(some_nullable_left_joined_column) and being confused when the total is lower than COUNT(*) after a LEFT JOIN, since unmatched rows are NULL there.",
+    "followUps": [
+      "After a LEFT JOIN, why might COUNT(b.id) differ from COUNT(*)?",
+      "Is COUNT(*) on a large InnoDB table free? Why or why not?",
+      "How would you count distinct combinations of two columns?"
+    ]
+  },
+  {
+    "id": 30,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "How does a B-tree (B+tree) index work in MySQL/InnoDB, and why does it speed up lookups?",
+    "answer": "InnoDB stores indexes as B+trees: a balanced, multi-level tree where internal nodes hold key ranges and only the leaf nodes hold the actual indexed values, with leaves linked in sorted order. Because the tree stays balanced and has a high fan-out, finding any key takes O(log n) page reads instead of scanning every row, and the sorted leaves make range scans (BETWEEN, >, ORDER BY on the index) efficient. The clustered index (the primary key) actually stores the full row data in its leaf nodes, so the table IS the primary-key B+tree. Secondary indexes store the indexed columns plus the primary key value in their leaves; looking up other columns requires a second 'bookmark lookup' back into the clustered index unless the index is covering. Indexes also help avoid sorts and can satisfy MIN/MAX cheaply. The trade-off is that every INSERT/UPDATE/DELETE must also maintain the index pages, and indexes consume disk and memory, so you index selectively for the queries that matter.",
+    "followUps": [
+      "What is a covering index and why does it avoid the bookmark lookup?",
+      "Why does a secondary index leaf store the primary key instead of a row pointer?",
+      "How does column order in a composite index affect which queries it can serve?"
+    ]
+  },
+  {
+    "id": 31,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "Critical",
+    "question": "Give the common reasons a query does NOT use an index that exists on the filtered column.",
+    "answer": "Several patterns prevent index use even when an index exists. (1) Leading wildcard in LIKE, e.g. LIKE '%abc', because the B+tree is ordered left-to-right and can't seek on an unknown prefix; LIKE 'abc%' can use it. (2) A function or expression on the indexed column, e.g. WHERE YEAR(created_at) = 2025 or WHERE UPPER(name) = 'X', which makes the column non-sargable — rewrite as a range (created_at >= '2025-01-01' AND created_at < '2026-01-01') or add a functional/generated-column index. (3) Implicit type mismatch, e.g. WHERE phone = 12345 when phone is VARCHAR, forcing an implicit conversion that defeats the index (and can cause wrong results). (4) Low selectivity / the optimizer estimating that a full scan is cheaper, common for columns like a boolean or a status with few distinct values, where reading the index plus bookmark lookups costs more than a table scan. (5) Wrong leading column of a composite index — an index on (a,b) can't seek on b alone. (6) OR conditions across different columns, functions like NOT, or stale/missing table statistics (fix with ANALYZE TABLE). You confirm the cause by reading EXPLAIN: look for type=ALL, key=NULL, or a much larger rows estimate than expected.",
+    "followUps": [
+      "Rewrite WHERE YEAR(created_at)=2025 so it becomes sargable.",
+      "How would you make WHERE UPPER(email)=? use an index in MySQL 8?",
+      "Why can an implicit string-to-number comparison both kill the index and return wrong rows?",
+      "An index exists on (status, created_at) but the query filters only on created_at — will it be used?"
+    ]
+  },
+  {
+    "id": 32,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "Walk me through how you read MySQL EXPLAIN output. Which columns matter most?",
+    "answer": "EXPLAIN shows the optimizer's chosen plan, one row per table/subquery access. The columns I focus on first: 'type' (the access method) — from best to worst roughly system/const/eq_ref/ref/range/index/ALL, where ALL means a full table scan and is a red flag on large tables. 'key' shows which index was actually chosen (NULL means none). 'possible_keys' lists candidates the optimizer considered. 'rows' is the estimated number of rows examined per step, and 'filtered' is the estimated percentage remaining after the condition — multiply them across joins to gauge total work. 'Extra' carries critical notes like 'Using index' (good — covering index, no table touch), 'Using where', 'Using filesort' (a sort that couldn't use an index), and 'Using temporary' (a temp table, often from GROUP BY/DISTINCT). 'ref' shows what the index is compared against. For deeper analysis I use EXPLAIN ANALYZE (MySQL 8.0.18+) which actually runs the query and reports real timing and actual vs estimated rows, or EXPLAIN FORMAT=JSON for cost details. The goal is to catch full scans, filesorts, temp tables, and large rows estimates, then add or fix an index or rewrite the query.",
+    "followUps": [
+      "What does 'Using filesort' mean and how can an index eliminate it?",
+      "What's the difference between type=ref and type=eq_ref?",
+      "How does EXPLAIN ANALYZE differ from plain EXPLAIN, and when would you reach for it?"
+    ]
+  },
+  {
+    "id": 33,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "Critical",
+    "question": "Describe your step-by-step process to diagnose and fix a slow query in production.",
+    "answer": "First I confirm and scope it: is it one query or a broader slowdown, when did it start, and did data volume, code, or a schema change precede it. I capture the exact query and parameters, often from the slow query log (long_query_time) or performance_schema / sys.statement_analysis, and check whether it's slow always or only under load. Next I run EXPLAIN (and EXPLAIN ANALYZE) to see the access path: I look for type=ALL, key=NULL, huge rows estimates, 'Using filesort', or 'Using temporary'. I check the predicates for non-sargable patterns (functions on columns, leading wildcards, type mismatches) and verify selectivity with SHOW INDEX / cardinality, running ANALYZE TABLE if statistics look stale. Typical fixes: add or adjust an index (often a composite or covering index matching the WHERE + ORDER BY), rewrite the query to be sargable, reduce returned columns/rows, or break a giant query up. I also rule out contention — SHOW ENGINE INNODB STATUS and SHOW PROCESSLIST for locks/lock waits, and buffer pool sizing for I/O. I validate the fix by re-running EXPLAIN and measuring latency on representative data, then watch it in production. Critically I change one thing at a time and measure, rather than adding indexes blindly, because every index has a write cost.",
+    "followUps": [
+      "Which tools or tables would you pull the offending query from in MySQL 8?",
+      "How do you distinguish a query that's slow by itself from one that's slow only due to locking/contention?",
+      "After adding an index, how do you confirm it actually helped without harming writes?",
+      "What would make you decide to rewrite the query instead of adding an index?"
+    ]
+  },
+  {
+    "id": 34,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What does ACID stand for, and what does each property guarantee?",
+    "answer": "ACID describes the guarantees of a reliable transaction. Atomicity means a transaction is all-or-nothing: either every statement commits or, on failure/rollback, none of them take effect. Consistency means a transaction moves the database from one valid state to another, never violating constraints, foreign keys, or triggers — if it would, it's rejected. Isolation means concurrent transactions don't see each other's uncommitted intermediate state; the degree of isolation is set by the isolation level (READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE). Durability means once a transaction is committed, it survives a crash or power loss, typically because the changes are flushed to a durable transaction log. In MySQL, the InnoDB engine provides ACID (using the redo log and undo log), whereas the older MyISAM engine does not support transactions at all. InnoDB's default isolation level is REPEATABLE READ.",
+    "followUps": [
+      "Which MySQL storage engine gives you ACID, and which does not?",
+      "What is InnoDB's default isolation level, and how does it differ from READ COMMITTED?",
+      "How do the redo log and undo log support durability and atomicity respectively?"
+    ]
+  },
+  {
+    "id": 35,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain the four SQL transaction isolation levels and the read phenomena they prevent.",
+    "answer": "The four standard isolation levels trade consistency against concurrency. READ UNCOMMITTED allows dirty reads — you can see another transaction's uncommitted changes. READ COMMITTED prevents dirty reads (you only see committed data) but still allows non-repeatable reads, where the same row read twice in one transaction returns different values because another transaction committed in between. REPEATABLE READ (InnoDB's default) additionally guarantees that re-reading the same rows yields the same values within the transaction; InnoDB implements this with MVCC consistent snapshots and largely prevents phantom rows for range reads using next-key (gap) locks. SERIALIZABLE is the strictest: transactions behave as if executed one at a time, preventing phantoms entirely, but with the most locking and lowest concurrency. The three classic phenomena are dirty read, non-repeatable read, and phantom read. Higher isolation means more correctness but more locking/blocking, so you pick the lowest level that meets the application's correctness needs.",
+    "followUps": [
+      "What is a phantom read, and how does InnoDB's next-key locking address it under REPEATABLE READ?",
+      "Why might a high-throughput OLTP app choose READ COMMITTED over REPEATABLE READ?",
+      "How does MVCC let readers avoid blocking writers in InnoDB?"
+    ]
+  },
+  {
+    "id": 36,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "What is a deadlock in InnoDB, how does MySQL handle it, and how do you prevent them?",
+    "answer": "A deadlock occurs when two or more transactions each hold a lock the other needs, forming a cycle so neither can proceed — for example transaction A locks row 1 then wants row 2, while B locks row 2 then wants row 1. InnoDB has automatic deadlock detection: it builds a wait-for graph, detects the cycle, and immediately rolls back the transaction it judges cheapest to undo (the victim), returning error 1213 'Deadlock found when trying to get lock; try restarting transaction'. The application should catch that error and retry the transaction. To prevent deadlocks: access tables and rows in a consistent order across all transactions, keep transactions short and commit promptly, use appropriate indexes so InnoDB locks fewer rows (poor indexing causes wider locking and more contention), avoid holding locks while waiting on external work, and consider lower isolation or explicit ordered locking. You diagnose them with SHOW ENGINE INNODB STATUS, whose 'LATEST DETECTED DEADLOCK' section shows the two transactions, the SQL, and the locks involved.",
+    "followUps": [
+      "How do you read the LATEST DETECTED DEADLOCK section of SHOW ENGINE INNODB STATUS?",
+      "Why does poor indexing increase the likelihood of deadlocks?",
+      "Why is consistent lock-ordering across transactions an effective prevention?",
+      "How is a deadlock different from a plain lock wait timeout?"
+    ]
+  },
+  {
+    "id": 37,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "What does the error 'Lock wait timeout exceeded; try restarting transaction' mean, and how do you investigate it?",
+    "answer": "This error (MySQL 1205) means a transaction waited longer than innodb_lock_wait_timeout (default 50 seconds) to acquire a row lock that another transaction was holding, so InnoDB gave up on the wait — note it rolls back only the current statement by default, not the whole transaction. It is NOT a deadlock: there's no cycle, just one transaction blocked too long by another that is holding the lock (often a long-running or forgotten uncommitted transaction, or an idle session that ran a write and never committed). To investigate, I check SHOW PROCESSLIST or information_schema for long-running/sleeping transactions, and in MySQL 8 use performance_schema.data_locks and data_lock_waits (older: sys.innodb_lock_waits) to see exactly which transaction is blocking which and on what row. SHOW ENGINE INNODB STATUS also lists active transactions and lock waits. The fix is usually to find and end the blocking transaction (commit/rollback or, as a last resort, KILL it), then address the root cause: shorten transactions, don't leave transactions open during user think-time, ensure autocommit behavior is understood, and add indexes so writes lock fewer rows. Raising the timeout only masks the problem.",
+    "followUps": [
+      "How is this error different from a deadlock (1213)?",
+      "Which performance_schema or information_schema tables show who holds the blocking lock?",
+      "What common application bug leaves a transaction open and causes this?",
+      "Is raising innodb_lock_wait_timeout a real fix? Why or why not?"
+    ]
+  },
+  {
+    "id": 38,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain the difference between shared locks and exclusive locks, and between row-level and table-level locking in InnoDB.",
+    "answer": "A shared lock (S) lets a transaction read a row and allows other transactions to also hold S locks on it, but blocks exclusive locks; you can request one explicitly with SELECT ... FOR SHARE (formerly LOCK IN SHARE MODE). An exclusive lock (X) is taken for writes (UPDATE/DELETE, or SELECT ... FOR UPDATE) and blocks any other S or X lock on that row, so only one writer proceeds. InnoDB primarily does row-level locking, locking only the index records it touches, which gives high concurrency; MyISAM by contrast only does table-level locks, so any write blocks all other access to the table. InnoDB also uses intention locks (IS/IX) at the table level as a fast way to signal that row locks exist beneath, and next-key/gap locks to lock ranges and prevent phantoms under REPEATABLE READ. A key gotcha: if a query can't use an index, InnoDB may end up locking far more rows (effectively scanning and locking many records), so good indexing keeps locking narrow. Pure reads under the default MVCC don't take row locks at all unless you ask for FOR UPDATE/FOR SHARE.",
+    "followUps": [
+      "What does SELECT ... FOR UPDATE do, and when would you use it?",
+      "Why does an UPDATE without a usable index lock more rows than expected?",
+      "What are intention locks (IX/IS) for?"
+    ]
+  },
+  {
+    "id": 39,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is the difference between a clustered index and a secondary (non-clustered) index in InnoDB?",
+    "answer": "In InnoDB every table has exactly one clustered index, which is the primary key, and the table rows are physically stored in the leaf nodes of that B+tree ordered by the primary key — so the clustered index IS the table data. If you don't define a primary key, InnoDB uses the first non-null UNIQUE index, or generates a hidden 6-byte row id. A secondary index is any other index; its leaf nodes store the indexed column(s) plus the primary key value (not a physical row pointer). That means a lookup via a secondary index that needs columns not in the index requires a second step — a 'bookmark lookup' — to fetch the full row from the clustered index by primary key. This is why a short primary key is desirable (it's duplicated into every secondary index) and why covering indexes that include all needed columns are fast (no bookmark lookup, EXPLAIN shows 'Using index'). It also explains why random primary keys like UUIDv4 hurt insert performance: rows must be inserted in PK order, causing page splits.",
+    "followUps": [
+      "Why is a small, monotonically increasing primary key generally preferred?",
+      "What is a bookmark lookup and how does a covering index avoid it?",
+      "What happens if a table has no primary key defined?"
+    ]
+  },
+  {
+    "id": 40,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "What is a composite index, and how does the leftmost-prefix rule determine which queries it can serve?",
+    "answer": "A composite (multi-column) index, e.g. INDEX(a, b, c), is a single B+tree sorted first by a, then by b within equal a, then by c. The leftmost-prefix rule says the index can be used for seeks only on a contiguous prefix starting at the first column: it serves filters on (a), (a,b), and (a,b,c), and can do a range on the last referenced column. It does NOT efficiently serve a query that filters only on b or only on c, because those columns aren't ordered independently. A subtle point: once you use a range (e.g. a > 5 or b BETWEEN ...), columns after the range column can no longer be used for seeking, only for filtering — so column order should generally put equality predicates before range predicates. The index can also satisfy ORDER BY if the order matches the index's leading columns, avoiding a filesort. This is why ordering matters: INDEX(a,b) and INDEX(b,a) are not interchangeable, and you design the order around your actual query patterns (most selective/equality columns first, columns used for sorting considered too).",
+    "followUps": [
+      "Given INDEX(a,b,c), can a query with WHERE b=? AND c=? use it? Why or why not?",
+      "Why should equality columns generally precede range columns in the index?",
+      "How can a composite index also remove a 'Using filesort'?"
+    ]
+  },
+  {
+    "id": 41,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain the difference between a logical backup (mysqldump) and a physical backup, and the trade-offs.",
+    "answer": "A logical backup, produced by tools like mysqldump or mysqlpump, exports the data as SQL statements (CREATE TABLE plus INSERTs) or as a text/CSV representation. It's portable across versions and platforms, human-readable, and lets you restore selectively (one table/database), but it's slow to create and especially slow to restore on large datasets because the server must re-parse and re-execute everything and rebuild indexes. A physical backup copies the actual data files — for example Percona XtraBackup or MySQL Enterprise Backup for InnoDB (hot/online), or a cold file copy/snapshot. Physical backups are much faster to take and restore at scale and preserve the exact on-disk state, but they're tied to the same MySQL version/OS/architecture and aren't human-readable or easily partial. For consistency, mysqldump should use --single-transaction on InnoDB to get a consistent snapshot without locking, and you generally want --routines, --triggers, and --events to capture stored objects. As a rule of thumb: small databases or migrations favor logical; large production databases favor physical for speed, often combined with binary logs for point-in-time recovery.",
+    "followUps": [
+      "Why is --single-transaction important when dumping InnoDB tables?",
+      "Which approach restores faster on a 500 GB database, and why?",
+      "Why can't you usually restore a physical backup onto a different MySQL major version?"
+    ]
+  },
+  {
+    "id": 42,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "How does point-in-time recovery (PITR) work in MySQL, and what is required to perform it?",
+    "answer": "Point-in-time recovery lets you restore the database to a specific moment — typically just before a bad event like an accidental DROP or a buggy mass UPDATE. It requires two things: a full backup (logical or physical) taken at a known position, and the binary logs (binlog) enabled and retained, since the binlog records every data-changing statement/row event after that backup. The procedure is: restore the full backup to recreate the baseline, then replay the binary logs from the backup's position forward up to the target time or log position using mysqlbinlog, e.g. mysqlbinlog --stop-datetime='2025-06-17 13:59:00' binlog.000123 | mysql, or --start-position/--stop-position for precise byte offsets. You stop just before the offending statement. Prerequisites and best practice: log_bin must be on (default in MySQL 8), you should know the binlog file and position at backup time (mysqldump --master-data or XtraBackup records this), binlog_format=ROW is safest for accurate replay, and you must retain binlogs long enough (binlog_expire_logs_seconds). To find the exact bad statement's position you inspect the binlog with mysqlbinlog or SHOW BINLOG EVENTS. PITR is only possible if binary logging was already running before the incident — you cannot recover changes that were never logged.",
+    "followUps": [
+      "What configuration must already be enabled before an incident for PITR to be possible?",
+      "How do you find the exact binlog position to stop at, just before an accidental DROP?",
+      "Why is binlog_format=ROW generally safer than STATEMENT for recovery?",
+      "How does mysqldump --master-data help with PITR?"
+    ]
+  },
+  {
+    "id": 43,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain primary/replica replication in MySQL. What are read replicas used for?",
+    "answer": "In primary/replica (formerly master/slave) replication, all writes go to the primary, which records every change in its binary log. Each replica connects to the primary, the replica's I/O thread pulls those binlog events into a local relay log, and the replica's SQL thread (one or more, with parallel replication) applies them to reproduce the same data. Replication is asynchronous by default, meaning the primary commits and returns to the client without waiting for replicas, so a replica is always slightly behind. Read replicas are used to scale out read-heavy workloads (reporting, analytics, search) by directing SELECTs to replicas while writes stay on the primary, and they also serve as warm standbys for failover and as a source for backups so the primary isn't loaded. Semi-synchronous replication can be enabled so the primary waits for at least one replica to acknowledge receipt, reducing data-loss risk at some latency cost. Key caveats: replicas are eventually consistent, so an app that reads its own write from a replica may not see it (replication lag), and you must route writes only to the primary.",
+    "followUps": [
+      "What's the difference between asynchronous, semi-synchronous, and synchronous replication?",
+      "What problem arises if an app writes to the primary and immediately reads from a replica?",
+      "What roles do the I/O thread, relay log, and SQL thread play on the replica?"
+    ]
+  },
+  {
+    "id": 44,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What is replication lag, what causes it, and how do you detect and reduce it?",
+    "answer": "Replication lag is the delay between a change committing on the primary and that change being applied on a replica, so reads from the replica can return stale data. You detect it with SHOW REPLICA STATUS (formerly SHOW SLAVE STATUS), where Seconds_Behind_Source gives an estimate, though a more accurate measure uses performance_schema replication tables or a heartbeat tool like pt-heartbeat that writes a timestamp on the primary and compares it on the replica. Common causes: a single-threaded SQL apply thread falling behind a write-heavy primary, long-running or large transactions, missing indexes on the replica making applied statements slow, the replica having weaker hardware or I/O, network latency, or lock contention from long reads on the replica. To reduce it: enable multi-threaded (parallel) replication (replica_parallel_workers with LOGICAL_CLOCK), use ROW binlog format, ensure the replica has the same indexes and adequate hardware, keep transactions small, avoid huge bulk operations, and offload heavy reporting reads. For correctness, the application can read-after-write from the primary, or wait for the replica to catch up to a known GTID/position before reading.",
+    "followUps": [
+      "Which value in SHOW REPLICA STATUS estimates lag, and why can it be misleading?",
+      "How does multi-threaded replication help, and what is LOGICAL_CLOCK?",
+      "If lag is caused by a missing index, why does it only show on the replica?"
+    ]
+  },
+  {
+    "id": 45,
+    "category": "Technical - Databases",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain MongoDB's document model and how a collection and document map to a table and row in a relational database.",
+    "answer": "MongoDB is a document database: data is stored as BSON documents, which are binary-encoded JSON-like structures with field/value pairs that can include nested objects and arrays. A document is roughly analogous to a row, a collection is analogous to a table, and a field is analogous to a column — but unlike a relational table, a collection has a flexible schema, so documents in the same collection can have different fields and shapes. Each document has a unique _id field (an ObjectId by default) acting as its primary key. The big modeling difference is that related data is often embedded inside a single document (e.g. an order with its line items as an array) instead of being split across normalized tables and joined, which favors data that's read together. MongoDB still supports referencing other documents by _id and can join across collections with the $lookup aggregation stage, but the design philosophy is 'data that is accessed together is stored together.' This denormalized model trades some redundancy and update complexity for fast single-document reads and developer flexibility.",
+    "followUps": [
+      "When would you embed related data versus reference it by _id?",
+      "What is the _id field and what type is it by default?",
+      "What is the MongoDB equivalent of a JOIN, and what are its limits?"
+    ]
+  },
+  {
+    "id": 46,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "When would you choose a NoSQL document store like MongoDB over a relational database like MySQL?",
+    "answer": "I'd lean toward MongoDB when the data is naturally document-shaped and accessed as a unit — e.g. product catalogs, user profiles, event/log data, or content with varied attributes — and when the schema evolves frequently, since the flexible schema avoids rigid migrations. It fits well when you need to scale writes/reads horizontally across many nodes via built-in sharding, and when most access is by key or within a single document rather than complex multi-table joins. I'd stay with a relational database when the data is highly relational with many-to-many relationships, when you need strong multi-row/multi-table ACID transactions and rich JOINs and aggregations, when data integrity via constraints and foreign keys is paramount (financial systems), or when ad-hoc reporting with arbitrary joins matters. It's worth noting the distinction has blurred: MongoDB added multi-document ACID transactions (4.0+) and MySQL has a native JSON type, so the decision is really about the dominant access pattern, consistency requirements, and scaling model rather than a hard 'SQL vs NoSQL' line. The honest answer in an interview is that it's a trade-off driven by the workload, not a one-size-fits-all rule.",
+    "followUps": [
+      "Which one would you pick for a banking ledger, and why?",
+      "Does MongoDB support multi-document ACID transactions today?",
+      "How does horizontal scaling (sharding) differ between the two?"
+    ]
+  },
+  {
+    "id": 47,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "How does a MongoDB replica set provide high availability, and what happens during a failover?",
+    "answer": "A MongoDB replica set is a group of mongod instances holding the same data: one primary that takes all writes, and one or more secondaries that replicate the primary's operations by tailing its oplog (operations log). Clients send writes to the primary, and secondaries asynchronously apply the oplog to stay in sync, optionally serving reads if the read preference allows. For high availability, members exchange heartbeats; if the primary becomes unreachable for longer than the election timeout, the remaining members hold an election (using the Raft-like protocol) and a secondary with the most up-to-date oplog is voted in as the new primary, typically within a few seconds. To elect a primary you need a majority of voting members, which is why an odd number of members (e.g. 3) is recommended, and why an arbiter (a vote-only member with no data) can break ties cheaply. During failover, writes briefly fail until the new primary is elected, and a properly configured driver with retryable writes will transparently retry. Write concern (e.g. w:majority) controls how many members must acknowledge a write for durability, protecting against data loss if a primary fails before replication.",
+    "followUps": [
+      "Why is an odd number of voting members recommended?",
+      "What is the oplog, and how do secondaries use it?",
+      "What does write concern w:majority protect against during a failover?",
+      "What is the role of an arbiter?"
+    ]
+  },
+  {
+    "id": 48,
+    "category": "Technical - Databases",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A MongoDB query is slow and doing a full collection scan. How do you diagnose and fix it?",
+    "answer": "I'd start by running the query with .explain('executionStats') and look at the winning plan: the telltale sign of a missing index is a COLLSCAN stage (collection scan) instead of an IXSCAN, plus totalDocsExamined being far larger than nReturned — ideally those numbers are close. I'd confirm which fields the query filters and sorts on, then create a matching index with db.collection.createIndex({ field: 1 }), or a compound index covering the filter plus the sort to also avoid an in-memory SORT stage (MongoDB rejects sorts that exceed the memory limit unless they can use an index or allowDiskUse). Compound indexes follow a leftmost-prefix rule similar to SQL, and field order matters (equality fields before sort/range fields — the ESR rule: Equality, Sort, Range). I'd verify the fix by re-running explain and checking it now uses IXSCAN with low docsExamined, and ideally a covered query (the index alone satisfies the projection, shown by totalDocsExamined: 0). I'd also use the database profiler (db.setProfilingLevel) or the slow-query log to catch other slow operations, and watch out for indexes that can't be used due to a leading-field mismatch, a regex with a leading wildcard, or a query operator like $ne / $nin that is non-selective.",
+    "followUps": [
+      "What does COLLSCAN versus IXSCAN tell you in explain output?",
+      "What is the ESR (Equality, Sort, Range) rule for compound index field order?",
+      "What is a covered query in MongoDB, and how do you recognize one?",
+      "Which operators tend to prevent effective index use?"
+    ]
+  },
+  {
+    "id": 49,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "Explain MVCC in InnoDB and how it lets readers avoid blocking writers.",
+    "answer": "MVCC (Multi-Version Concurrency Control) lets InnoDB present each transaction a consistent snapshot of the data without locking rows for plain reads. It works using the undo log and hidden per-row system columns: each row carries a DB_TRX_ID (the transaction id that last modified it) and a DB_ROLL_PTR pointing to the previous version stored in the undo log. When a transaction does a consistent (non-locking) SELECT, it uses a read view that determines, per row, whether the latest version is visible to it; if the row was modified by a transaction not visible to this snapshot, InnoDB walks the DB_ROLL_PTR chain through the undo log to reconstruct the older version the reader is allowed to see. Consequently, readers never block writers and writers never block readers for ordinary SELECTs — only writer-vs-writer on the same row, or explicit locking reads (FOR UPDATE/FOR SHARE), cause waits. Under REPEATABLE READ the read view is established at the transaction's first read and reused, giving a stable snapshot; under READ COMMITTED a fresh read view is taken for each statement. The undo logs that back old versions are kept until no snapshot needs them and then purged, which is why very long-running transactions can bloat undo/history and hurt performance.",
+    "followUps": [
+      "What are the DB_TRX_ID and DB_ROLL_PTR hidden columns used for?",
+      "How does the read view differ between REPEATABLE READ and READ COMMITTED?",
+      "Why can a very long-running transaction cause undo log / history list bloat?"
+    ]
+  },
+  {
+    "id": 50,
+    "category": "Technical - Databases",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "Write a query to return each department's name and its number of employees, including departments with zero employees, then explain the JOIN and aggregation choices.",
+    "answer": "The query is: SELECT d.name, COUNT(e.id) AS employee_count FROM departments d LEFT JOIN employees e ON e.department_id = d.id GROUP BY d.id, d.name ORDER BY employee_count DESC. The LEFT JOIN is essential because it keeps every department even when no employee matches; an INNER JOIN would silently drop empty departments. The aggregate must be COUNT(e.id), not COUNT(*): for a department with no employees the LEFT JOIN produces one row with all employee columns NULL, and COUNT(e.id) correctly counts that as 0 because it ignores NULLs, whereas COUNT(*) would wrongly return 1. I group by d.id (the primary key) and include d.name in GROUP BY for portability and to satisfy ONLY_FULL_GROUP_BY, which MySQL 8 enables by default. A subtle trap to avoid: if I added a filter on the employees table in the WHERE clause (e.g. WHERE e.status = 'active'), it would turn the LEFT JOIN back into an INNER JOIN and drop the zero-employee departments — that predicate must go in the ON clause (... ON e.department_id = d.id AND e.status = 'active') to preserve the outer join. To make this efficient at scale I'd ensure an index on employees.department_id so the join and grouping use the index rather than scanning.",
+    "followUps": [
+      "Why COUNT(e.id) instead of COUNT(*) here?",
+      "If you only wanted to count 'active' employees but still show all departments, where does that filter go?",
+      "What index would help this query, and which column?",
+      "Why must d.name appear in GROUP BY under ONLY_FULL_GROUP_BY?"
+    ]
+  },
+  {
+    "id": 51,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Compare the OSI model and the TCP/IP model. Name the OSI layers and tell me which protocols or devices operate at each.",
+    "answer": "The OSI model has seven layers: Physical (L1, cables/NICs/hubs, bits), Data Link (L2, MAC addressing, frames, switches, ARP, Ethernet), Network (L3, IP addressing and routing, routers, ICMP), Transport (L4, TCP/UDP, ports, segments), Session (L5, session setup/teardown), Presentation (L6, encoding/encryption like TLS sits around here), and Application (L7, HTTP, DNS, SMTP, FTP). The TCP/IP model is a more practical four-layer model: Link (combines OSI L1-L2), Internet (L3, IP), Transport (L4, TCP/UDP), and Application (L5-L7 collapsed into one). The key mapping to remember is IP at L3, TCP/UDP at L4, and protocols like HTTP/DNS at L7. Switches forward by MAC at L2 while routers forward by IP at L3; firewalls and load balancers can operate at L3/L4 or up at L7 depending on type. Knowing which layer a problem lives at is what lets you pick the right diagnostic tool, for example ping/traceroute for L3, telnet/nc or ss for L4, and curl for L7.",
+    "followUps": [
+      "At which layer does a TCP port live, and at which does an IP address live?",
+      "Where would you place TLS in the OSI model and why is that placement debated?",
+      "A switch and a router both forward traffic - what is the fundamental difference in how they make forwarding decisions?"
+    ]
+  },
+  {
+    "id": 52,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "Walk me through everything that happens, end to end, from the moment a user types https://shop.example.com into their browser and hits Enter, until the page renders.",
+    "answer": "First the browser checks its own cache, then the OS cache and hosts file for shop.example.com; if not found it does DNS resolution: the stub resolver queries the configured recursive resolver, which walks root then TLD (.com) then the authoritative nameserver, returning an A/AAAA record, and the answer is cached per its TTL. With the IP in hand the browser opens a TCP connection to port 443 via the three-way handshake (SYN, SYN-ACK, ACK). Because it is HTTPS, a TLS handshake follows: ClientHello/ServerHello negotiate the version and cipher, the server presents its certificate chain, the client validates it against a trusted CA and checks the hostname and expiry, then keys are exchanged and an encrypted session is established. The browser then sends the HTTP request (e.g., GET / with Host, User-Agent, and Cookie headers) over the encrypted channel, and the server responds with a status line, response headers, and the HTML body. The browser parses the HTML, discovers sub-resources (CSS, JS, images), and repeats DNS/TCP/TLS/HTTP as needed (often reusing connections via keep-alive or HTTP/2 multiplexing) before painting the page. Along the way the request may traverse a load balancer or reverse proxy in front of the origin. Tools to observe each stage: dig for DNS, ss or Wireshark for the handshake, openssl s_client for TLS, and curl -v for the full HTTP exchange.",
+    "followUps": [
+      "If the page hangs at the very start, how would you tell whether DNS, TCP, or TLS is the culprit?",
+      "Where do the browser cache, OS cache, and hosts file fit into the resolution order?",
+      "How does HTTP keep-alive or HTTP/2 change how many TCP/TLS handshakes occur for one page?"
+    ]
+  },
+  {
+    "id": 53,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is DNS and what is the difference between a recursive resolver and an authoritative nameserver?",
+    "answer": "DNS (Domain Name System) is the distributed system that translates human-readable names like shop.example.com into IP addresses (and other records). A recursive resolver is the server your client points to (often run by the ISP, or public ones like 8.8.8.8 or 1.1.1.1); it does the legwork of querying other servers on your behalf and caches results to speed up future lookups. An authoritative nameserver is the server that actually holds the real records for a given zone and gives the definitive answer - for example.com that would be the nameservers listed at the registrar. The resolution path is hierarchical: the resolver asks a root server, which points to the TLD server (.com), which points to the domain's authoritative server, which returns the record. The client itself usually runs only a stub resolver that forwards everything to the recursive resolver. You can see this hierarchy with dig +trace example.com, and you can query a specific server with dig @8.8.8.8 example.com.",
+    "followUps": [
+      "What does the TTL on a record control, and where is it honored?",
+      "What is the difference between a stub resolver and a recursive resolver?",
+      "How would you query one specific nameserver to bypass your local cache?"
+    ]
+  },
+  {
+    "id": 54,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "List the common DNS record types and explain what each is used for.",
+    "answer": "A maps a name to an IPv4 address and AAAA maps a name to an IPv6 address. CNAME is an alias that points one name to another canonical name (e.g., www -> shop.example.com), and it cannot coexist with other records on the same name or sit at the zone apex. MX records define the mail servers for a domain and carry a priority value. NS records delegate a zone to its authoritative nameservers. TXT records hold arbitrary text and are heavily used for SPF, DKIM, DMARC, and domain-ownership verification. SOA is the start-of-authority record holding zone metadata like the primary nameserver, serial number, and refresh/retry/expire timers. PTR records do reverse lookups (IP back to name) and live in the in-addr.arpa zone, and SRV records advertise the host and port for a service. You can query any specific type with dig, for example dig MX example.com or dig TXT example.com.",
+    "followUps": [
+      "Why can't a CNAME exist at the zone apex, and what do providers offer as a workaround (e.g., ALIAS/ANAME)?",
+      "Which records would you check to diagnose an email delivery problem?",
+      "What is a PTR record used for and where does it live in the DNS tree?"
+    ]
+  },
+  {
+    "id": 55,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A user reports they can't reach an internal site by name, but it works by IP. How do you diagnose the DNS resolution failure, and what does NXDOMAIN mean versus an empty answer?",
+    "answer": "Since the IP works, the problem is name resolution rather than connectivity, so I focus on DNS. I'd start with nslookup or dig on the name and read the status field: NXDOMAIN means the name definitively does not exist in the zone (often a typo, a record never created, or querying the wrong domain/search suffix), whereas NOERROR with zero answers means the name exists but has no record of the type requested (e.g., an A query against a name that only has a CNAME or AAAA). I'd compare the result against a known-good server using dig @<resolver> name and dig @8.8.8.8 name to see whether the client's configured resolver is the problem or the authoritative data is. I'd check whether the client is appending the wrong DNS search suffix, and check for a stale cache by flushing it (ipconfig /flushdns on Windows, or systemd-resolve --flush-caches / resolvectl flush-caches on Linux) and re-querying. dig +trace walks the delegation from the root to spot a broken delegation or a record that exists upstream but isn't being returned locally. I'd also confirm the record's value and TTL are what we expect, since a recently changed record can still be cached at the old value until the TTL expires.",
+    "followUps": [
+      "How would you prove a problem is a stale cache rather than a wrong authoritative record?",
+      "What is the practical difference between NXDOMAIN and NOERROR with an empty answer section?",
+      "How can a DNS search suffix cause a name to resolve on one machine but not another?"
+    ]
+  },
+  {
+    "id": 56,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "You changed an A record an hour ago but some users still hit the old server. Explain why, and how TTL and caching are involved.",
+    "answer": "DNS answers are cached at multiple levels - the browser, the OS stub resolver, the recursive resolver, and sometimes corporate forwarders - and each cache holds the record until its TTL (time to live) counts down to zero. If the record's TTL was, say, 3600 seconds (one hour), resolvers that fetched the old value just before the change will keep serving it for up to an hour regardless of what the authoritative server now says. So the staleness is expected behavior, not a bug. The fix going forward is to lower the TTL well in advance of a planned change (e.g., to 60-300 seconds) so the window of inconsistency is short, then raise it back afterward for efficiency. To verify the authoritative value is correct right now I'd query the authoritative nameserver directly with dig @<authoritative-ns> name, which bypasses intermediate caches, and compare it to dig name through the normal resolver. Affected clients can flush their local cache (ipconfig /flushdns) to pick up the new value immediately, but you cannot force third-party resolvers worldwide to flush - you can only wait out the TTL.",
+    "followUps": [
+      "What TTL would you set before a planned migration, and why not just set it to zero permanently?",
+      "How do you read the current remaining TTL from a dig response?",
+      "Why can't you force every resolver on the internet to drop a cached record?"
+    ]
+  },
+  {
+    "id": 57,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain the TCP three-way handshake and contrast TCP with UDP.",
+    "answer": "The three-way handshake establishes a reliable TCP connection in three steps: the client sends a SYN with its initial sequence number, the server replies with SYN-ACK (acknowledging the client's sequence and sending its own), and the client responds with ACK, after which data can flow. This negotiates sequence numbers and options (like window size and MSS) and confirms both sides can send and receive. TCP is connection-oriented and reliable: it guarantees ordered delivery, retransmits lost segments, and does flow and congestion control, which makes it the choice for HTTP, SSH, and email. UDP is connectionless and fire-and-forget: no handshake, no ordering or retransmission guarantees, just lower overhead and latency, which suits DNS queries, DHCP, VoIP, and video streaming. Connection teardown in TCP is a separate four-way exchange using FIN/ACK in each direction. You can watch a handshake live in Wireshark or with tcpdump, and a quick telnet host port or nc -vz host port tells you whether the handshake completes.",
+    "followUps": [
+      "Which sequence-number and option negotiation happens during the SYN/SYN-ACK?",
+      "Why is DNS traditionally over UDP, and when does it fall back to TCP?",
+      "How does TCP tear a connection down compared to how it sets one up?"
+    ]
+  },
+  {
+    "id": 58,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "What do common TCP connection states like ESTABLISHED, TIME_WAIT, CLOSE_WAIT, and SYN_SENT mean, and how would you view them?",
+    "answer": "I'd view them with ss -tan (or the older netstat -an) on Linux, or netstat -ano on Windows, which lists each socket and its state. SYN_SENT means the local side sent a SYN and is waiting for the SYN-ACK; lots of these stuck usually point to a firewall dropping packets or an unreachable/unresponsive server. ESTABLISHED is a fully open, active connection. TIME_WAIT is a normal state on the side that closed the connection actively, where the socket lingers (typically up to 2*MSL) to absorb stray retransmitted packets; large numbers are usually benign but can exhaust ephemeral ports under very high connection churn. CLOSE_WAIT means the remote side sent a FIN and the local application has not yet closed its end - a buildup of CLOSE_WAIT almost always indicates an application bug where sockets aren't being closed. LISTEN means a server socket is waiting for inbound connections. Reading these states helps localize whether a problem is the network/firewall (SYN_SENT), normal churn (TIME_WAIT), or the app failing to clean up (CLOSE_WAIT).",
+    "followUps": [
+      "A server shows thousands of CLOSE_WAIT sockets - what does that tell you about the application?",
+      "Why does TIME_WAIT exist at all, and which side of the connection enters it?",
+      "What does a pile of SYN_SENT states on the client suggest about the path to the server?"
+    ]
+  },
+  {
+    "id": 59,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "List the main HTTP methods and explain the difference between safe and idempotent methods.",
+    "answer": "The common methods are GET (retrieve a resource), POST (submit data / create, with side effects), PUT (create or fully replace a resource at a known URI), PATCH (partially update a resource), DELETE (remove a resource), HEAD (like GET but returns headers only, no body), and OPTIONS (ask which methods/capabilities are allowed, used in CORS preflight). A safe method is one that doesn't change server state - GET, HEAD, and OPTIONS are safe and should be read-only. An idempotent method produces the same result no matter how many times it's repeated: GET, PUT, DELETE, and HEAD are idempotent, while POST generally is not, because sending it twice can create two resources. PATCH is not guaranteed to be idempotent. These properties matter for safe retries: clients, proxies, and load balancers can freely retry idempotent requests but must be careful retrying POST. You can exercise any method with curl, for example curl -X POST or curl -I for a HEAD request.",
+    "followUps": [
+      "Why can a load balancer safely retry a GET but not a POST?",
+      "What is the difference between PUT and PATCH?",
+      "What is an OPTIONS request used for in the context of CORS?"
+    ]
+  },
+  {
+    "id": 60,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "Explain HTTP status code classes, and specifically the difference between 4xx and 5xx. When would you see 400, 401, 403, and 404?",
+    "answer": "Status codes are grouped by class: 1xx informational, 2xx success (200 OK, 201 Created, 204 No Content), 3xx redirection (301 permanent, 302/307 temporary, 304 Not Modified), 4xx client errors, and 5xx server errors. The core distinction is responsibility: 4xx means the request itself was faulty so the client should change something, while 5xx means the request was valid but the server failed to fulfill it, so the fix is server-side. For the 4xx examples: 400 Bad Request means the request was malformed or syntactically invalid; 401 Unauthorized means authentication is missing or invalid (you need to log in / provide valid credentials); 403 Forbidden means the server understood you and you are authenticated but you are not permitted to access this resource; and 404 Not Found means the resource doesn't exist at that URI. A practical tell is 401 vs 403: 401 is about who you are (authentication), 403 is about what you're allowed to do (authorization). When triaging, a 4xx points me at the client request, URL, or credentials, whereas a 5xx points me at the application, upstream, or infrastructure. curl -i or curl -v shows the exact status line and headers.",
+    "followUps": [
+      "If you're authenticated but still get 403, what's the likely cause?",
+      "What's the difference between a 301 and a 302 redirect, and why does it matter for caching?",
+      "A client swears the page is broken but the server returns 200 - where do you look next?"
+    ]
+  },
+  {
+    "id": 61,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "Distinguish 500, 502, 503, and 504. A user gets a 502 Bad Gateway - what does that tell you and where do you investigate?",
+    "answer": "These are all 5xx server-side errors but they point at different places. 500 Internal Server Error is a generic catch-all meaning the application itself threw an unhandled error - you investigate the app logs and code. 502 Bad Gateway means a gateway or proxy (like nginx, a load balancer, or a reverse proxy) received an invalid or empty response from the upstream/backend it forwarded to - the front door is up but the backend returned garbage, crashed mid-response, or isn't speaking HTTP properly. 503 Service Unavailable means the server is up but temporarily can't handle the request, typically because it's overloaded, out of worker capacity, or deliberately in maintenance; it often comes with a Retry-After header. 504 Gateway Timeout means the gateway waited for the upstream and the upstream never responded in time - the backend is too slow, hung, or unreachable from the proxy. So a 502 tells me the edge proxy is reachable but its connection to the backend is broken: I'd check that the backend process is actually running and listening, that the proxy's upstream address/port and health checks are correct, and the proxy and backend logs for the failed forward. The contrast with 504 is the key clue - 502 is a bad/empty reply, 504 is no reply in time.",
+    "followUps": [
+      "How do 502 and 504 differ in what they tell you about the backend?",
+      "What does a 503 with a Retry-After header signal, and who typically issues it?",
+      "If the load balancer returns 502 but hitting the backend directly returns 200, what would you suspect?"
+    ]
+  },
+  {
+    "id": 62,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "How does TLS/HTTPS work? Walk me through the handshake and the role of the certificate.",
+    "answer": "TLS provides encryption, integrity, and server authentication on top of TCP, so after the TCP three-way handshake the TLS handshake begins. The client sends a ClientHello listing supported TLS versions, cipher suites, and extensions (like SNI naming the host it wants). The server responds with a ServerHello choosing the version and cipher, and sends its certificate chain. The client validates that certificate: it checks the signature chains up to a trusted root CA, that the hostname matches the certificate's Subject Alternative Name, that it's within its validity dates, and that it isn't revoked. Then the two sides perform a key exchange - in modern TLS this is ephemeral Diffie-Hellman (ECDHE), which provides forward secrecy - to derive a shared symmetric session key without ever sending it on the wire. Once keys are set both sides send Finished messages and switch to fast symmetric encryption (e.g., AES) for the actual HTTP traffic. TLS 1.3 streamlines this to essentially one round trip. The certificate's job is twofold: prove the server's identity via the CA's signature, and carry the public key used to bootstrap the key exchange. openssl s_client -connect host:443 -servername host lets you watch the negotiation and inspect the chain.",
+    "followUps": [
+      "What does SNI do and why is it needed when many sites share one IP?",
+      "What is forward secrecy and which key exchange provides it?",
+      "How does TLS 1.3 reduce the number of round trips compared to TLS 1.2?"
+    ]
+  },
+  {
+    "id": 63,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain the certificate chain of trust. How does a browser decide a certificate is valid?",
+    "answer": "A certificate chain of trust links the server's certificate up to a root certificate authority the client already trusts. The server presents a leaf (end-entity) certificate, which is signed by one or more intermediate CA certificates, which are in turn signed by a root CA. Root CAs are self-signed and pre-installed in the operating system or browser trust store; the client trusts the leaf only because it can follow signatures from the leaf, through the intermediates, to a root it already trusts. For a certificate to be judged valid the client checks several things: the signature chain validates all the way to a trusted root, the certificate is within its notBefore/notAfter validity window, the requested hostname matches a Subject Alternative Name entry, the certificate hasn't been revoked (via CRL or OCSP), and the chain uses acceptable algorithms. A critical operational detail is that the server must send the intermediate certificate(s) along with the leaf; if it omits them, some clients can't build the chain and report an untrusted or incomplete-chain error even though the certificate itself is fine. You can dump and verify the presented chain with openssl s_client -connect host:443 -showcerts and inspect a cert with openssl x509 -text -noout.",
+    "followUps": [
+      "Why must a server send intermediate certificates, and what error appears if it doesn't?",
+      "What is the difference between OCSP and a CRL for revocation checking?",
+      "Where does the browser's set of trusted root CAs come from?"
+    ]
+  },
+  {
+    "id": 64,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A user sees a certificate error in the browser. Walk me through diagnosing whether it's expired, a name mismatch, or an incomplete chain.",
+    "answer": "I'd reproduce it from the command line to get the exact reason rather than relying on the browser's summary, using openssl s_client -connect host:443 -servername host (the -servername sets SNI so the server returns the right cert), or curl -v https://host which prints the verification failure. For expiry I read the validity dates with openssl x509 -noout -dates (or look at notBefore/notAfter); an expired cert simply needs renewal, and I'd also sanity-check the client's clock since a wrong system date makes a valid cert look expired or not-yet-valid. For a name mismatch I check the Subject Alternative Name list with openssl x509 -noout -text and confirm the hostname the user typed is actually covered; common causes are hitting the site by IP, using www vs apex, or a wildcard that doesn't cover the subdomain. For an incomplete chain, openssl s_client -showcerts shows how many certs the server sent - if it only sends the leaf and the client can't build a path to a root, that's a missing-intermediate problem, fixed by installing the intermediate bundle on the server. A quick external sanity check is to test with a tool or another machine to rule out a local trust-store issue. The diagnostic discipline is: get the precise error string first, then map expired -> renew/check clock, name mismatch -> check SAN/hostname, incomplete chain -> add intermediates.",
+    "followUps": [
+      "How would a wrong system clock on the client mimic an expired-certificate error?",
+      "Which openssl flag lets you see whether the server is sending the intermediate certificates?",
+      "If the cert is valid in Firefox but not in a custom app, what does that suggest about trust stores?"
+    ]
+  },
+  {
+    "id": 65,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What is a load balancer, what is a reverse proxy, and how do they differ from a forward proxy?",
+    "answer": "A reverse proxy sits in front of one or more backend servers and accepts client requests on their behalf, then forwards them to the appropriate backend and returns the response; clients think they're talking to the proxy. It commonly handles TLS termination, caching, compression, request routing by path or host, and hiding the backend topology - nginx and HAProxy are typical examples. A load balancer is a specialized role focused on distributing incoming traffic across a pool of backends to spread load and provide high availability, using algorithms like round-robin, least-connections, or hashing, plus health checks to stop sending traffic to dead nodes. In practice many products do both: a reverse proxy often load-balances, and an L7 load balancer is effectively a reverse proxy. The contrast is the forward proxy, which sits in front of clients and represents them outbound to the internet (used for corporate egress filtering, caching, and anonymity) - it serves the client, whereas a reverse proxy serves the server. Load balancers operate at L4 (TCP/UDP, just forwarding by IP/port) or L7 (HTTP-aware, able to route on URL/headers and terminate TLS).",
+    "followUps": [
+      "What's the difference between an L4 and an L7 load balancer?",
+      "What does it mean to terminate TLS at the load balancer, and what's the trade-off?",
+      "How do health checks change which backends receive traffic?"
+    ]
+  },
+  {
+    "id": 66,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Explain the difference between a 'connection refused' and a 'connection timed out', and what each tells you about firewalls and the remote host.",
+    "answer": "Connection refused means a packet actually reached the destination host and it actively rejected the connection by sending back a TCP RST (or an ICMP port-unreachable). That tells you the host is up and reachable at L3, but nothing is listening on that port, or a firewall is configured to reject (rather than silently drop) the traffic. Connection timed out means the SYN was sent and no response ever came back within the timeout - no RST, no SYN-ACK, just silence. That typically points to a firewall or security group that is dropping packets, a host that is down or unreachable, or a routing/network black hole. The mental model: refused = 'something answered and said no,' timeout = 'nothing answered at all.' This distinction is one of the fastest ways to localize a problem - a refused connection usually means service-down or wrong port on a reachable host, while a timeout usually means a network path or firewall issue. I'd test with telnet host port or nc -vz host port to see which behavior I get, and use traceroute/tracert to see how far packets get before the path dies on a timeout.",
+    "followUps": [
+      "Why does a DROP firewall rule produce a timeout while a REJECT rule produces a refused?",
+      "If ping works but the port times out, what does that tell you?",
+      "Which tools would you use to distinguish these two, and what output confirms each?"
+    ]
+  },
+  {
+    "id": 67,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is a firewall, and what's the difference between a stateful and a stateless firewall? What's the difference between blocking inbound and outbound?",
+    "answer": "A firewall is a device or software that controls network traffic by allowing or denying packets based on rules, typically matching on source/destination IP, port, and protocol, and on L7 firewalls also on application data. A stateless firewall (a packet filter / ACL) evaluates each packet in isolation against its rules with no memory of prior packets, so you often have to write explicit rules for both directions of a conversation. A stateful firewall tracks the state of active connections in a connection table, so once it permits an outbound request it automatically allows the corresponding return traffic, which is simpler and more secure - this is how most modern firewalls and cloud security groups behave. Inbound (ingress) rules govern traffic arriving at a host or network and protect your services from the outside, while outbound (egress) rules govern traffic leaving, used to stop compromised hosts from phoning home or to restrict what services can reach externally. A common support scenario is that a service is up but unreachable purely because an inbound rule on a firewall or cloud security group doesn't permit the client's source on that port. Firewalls also choose to either reject (send RST/ICMP) or drop (silently discard) blocked traffic, which is what produces 'refused' versus 'timeout' behavior.",
+    "followUps": [
+      "Why does a stateful firewall not need an explicit rule for return traffic?",
+      "A web service is running but external users can't connect - which firewall direction would you check first?",
+      "How do cloud security groups relate to traditional firewalls?"
+    ]
+  },
+  {
+    "id": 68,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "Critical",
+    "question": "Give me your structured, end-to-end methodology for diagnosing 'users can't reach the website.' How do you isolate the failing layer?",
+    "answer": "I scope it first: who is affected (one user, one region, everyone), what 'can't reach' actually means (error page, timeout, cert warning, slow), and when it started, then I work the stack layer by layer to bisect the failure. Resolution: dig/nslookup the hostname to confirm DNS returns the right IP and isn't NXDOMAIN or stale - if name fails but IP works, it's DNS. Connectivity (L3): ping the IP and run traceroute/tracert to see if packets reach the destination or die at a hop, distinguishing a network/routing/firewall problem. Transport (L4): test the port with nc -vz host 443 or telnet to see connection refused (nothing listening / reject rule) versus timeout (dropped by firewall, host down). TLS: openssl s_client -connect host:443 to catch expired, name-mismatch, or incomplete-chain errors before HTTP even starts. Application (L7): curl -v https://host to read the actual status code - a 4xx points at the request/auth/URL, a 502/503/504 points at the backend or proxy, and a 200 means the site is actually fine and the problem is client-side (DNS cache, proxy, browser). I also compare a working vantage point (another network, another user) to localize client-versus-server, and check the load balancer and origin health/logs. The whole point is to change one variable at a time from the bottom up so I prove which layer owns the failure rather than guessing.",
+    "followUps": [
+      "If curl returns 200 from your machine but users still report failure, what's your next hypothesis?",
+      "How would you quickly determine whether the problem is the client side or the server side?",
+      "At which step would a 504 from the load balancer change your direction of investigation?"
+    ]
+  },
+  {
+    "id": 69,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "How do you use curl -v to debug an HTTP/HTTPS request, and what do the lines prefixed with *, >, and < tell you?",
+    "answer": "curl -v (verbose) prints the full transaction and prefixes lines so you can tell who is talking: * lines are curl's own informational/diagnostic notes (DNS resolution, the TCP connect, the TLS handshake details, certificate subject/issuer and verification result, connection reuse), > lines are the request headers curl sent (the request line, Host, User-Agent, Accept, any auth/cookies), and < lines are the response headers the server sent back (status line, Content-Type, Set-Cookie, Location, caching headers). Reading top to bottom you can localize a failure: if it stalls or errors at the 'Trying <ip>...' / 'Connected' stage it's TCP/firewall; if the SSL/certificate lines show a verify failure it's a TLS/cert problem; if you get a clean < status line then the network path is fine and you're debugging an application response. Useful companions are -i (include response headers in normal output), -I (HEAD request, headers only), -L (follow redirects so you can see a 301/302 chain), -k (ignore cert errors to confirm the problem is purely TLS trust), and --resolve host:443:IP to test a specific backend while keeping the right Host/SNI. It's effectively a one-line way to replay the DNS -> TCP -> TLS -> HTTP walkthrough and see exactly where it breaks.",
+    "followUps": [
+      "How would you use curl to test one specific backend behind a load balancer without DNS pointing there?",
+      "What does adding -L change, and when do you need it?",
+      "If curl -k succeeds but curl fails, what have you just proven?"
+    ]
+  },
+  {
+    "id": 70,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "Half of users behind a load balancer get errors and half are fine, for the same URL. What does this pattern suggest and how do you confirm it?",
+    "answer": "A clean split like that strongly suggests one backend in the pool is unhealthy while the others are fine, so requests load-balanced to the bad node fail and requests to the good nodes succeed - that's why it looks intermittent and roughly proportional to the number of bad backends. Other candidates for a partial failure are a stale or bad instance after a partial deploy (version skew), one backend with an expired cert or wrong config, a single zone/AZ being down, or session-affinity sending certain users repeatedly to the broken node. To confirm, I'd bypass the load balancer and hit each backend directly (curl --resolve host:443:<backend-ip> or curl http://<backend-ip> with the right Host header) and compare responses - the broken one will reveal the 5xx or error while the others return 200. I'd check the load balancer's health-check status and per-backend metrics/logs to see which member is failing checks or serving errors, and look for version differences across nodes. If it correlates with specific users rather than being random, I'd suspect sticky sessions pinning them to the bad node. The fix is usually to pull the unhealthy backend out of rotation (or fix/redeploy it) and verify the health check actually catches that failure mode so it's ejected automatically next time.",
+    "followUps": [
+      "How would sticky sessions change the symptom from 'random half' to 'the same users every time'?",
+      "What health-check misconfiguration would let a broken backend stay in rotation?",
+      "How do you hit one specific backend directly to confirm which node is bad?"
+    ]
+  },
+  {
+    "id": 71,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "Explain how DNS-based and IP/anycast-based high availability and geo-routing work, and the trade-offs of relying on DNS for failover.",
+    "answer": "DNS-based HA/geo-routing uses the resolution step itself to steer clients: the authoritative DNS (often a managed provider) returns different answers based on health checks, the resolver's geographic location, latency, or weighting, so users get routed to the nearest or healthiest endpoint, and a failed endpoint is dropped from the answers. Its big weakness is caching - because answers live in resolver and client caches for the record's TTL, failover is only as fast as that TTL, and some clients ignore TTLs entirely, so DNS failover is never instantaneous and you can't fully control how quickly the world moves off a dead IP. Anycast takes a different approach: the same IP address is advertised via BGP from multiple locations, and the network routes each client to the topologically nearest instance; failover and geo-proximity happen at the routing layer in seconds without waiting on DNS TTLs, which is why CDNs and public DNS resolvers (1.1.1.1, 8.8.8.8) use it. The trade-offs: DNS routing is flexible, application-agnostic, and easy to deploy but slow to converge and TTL-bound; anycast converges fast and is resilient but requires BGP control and can cause issues for long-lived stateful TCP sessions if routing shifts mid-connection. In practice large sites combine both - anycast at the edge/CDN plus DNS-level weighting and health-based answers - and you'd verify behavior with dig from multiple locations and by watching which IPs are returned as health changes.",
+    "followUps": [
+      "Why is a low TTL not a complete solution for fast DNS failover?",
+      "What problem can anycast cause for a long-lived TCP connection?",
+      "How would you verify from the outside that geo-routing is returning different answers by region?"
+    ]
+  },
+  {
+    "id": 72,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "A request works with curl from the server but fails from the browser with a CORS error, while the network path is clearly fine. Explain what's happening and how CORS, preflight, and SNI/Host routing fit in.",
+    "answer": "CORS errors are not a network-connectivity failure at all - the request usually reaches the server and even succeeds, but the browser blocks the response from being read by JavaScript because the cross-origin security policy isn't satisfied. That's why curl works (curl ignores CORS; it's a browser-enforced, same-origin-policy mechanism) while the browser fails. CORS applies when page origin A (scheme+host+port) makes a request to origin B; the browser requires B to return Access-Control-Allow-Origin (and related Access-Control-Allow-* headers) permitting A. For non-simple requests (custom headers, methods like PUT/DELETE, certain content types) the browser first sends a preflight OPTIONS request, and if the server doesn't answer it with the right allow headers, the real request is blocked. So the fix lives on the server/proxy: configure the correct CORS response headers (and handle OPTIONS), not on the network. SNI and Host routing are a related 'right place, wrong identity' class of bug: when many virtual hosts share an IP, the server uses the TLS SNI extension and the HTTP Host header to decide which site/cert to serve, so if a client sends the wrong SNI/Host (or you test by IP), you can reach the box but get the wrong certificate or the wrong app, which looks like a failure even though connectivity is fine. To diagnose CORS I'd open the browser dev tools network/console to read the exact CORS message and the OPTIONS response headers, and reproduce the preflight with curl -X OPTIONS -H 'Origin: ...' -v to inspect what the server returns.",
+    "followUps": [
+      "Why does curl succeed where the browser fails on a CORS-blocked request?",
+      "Which requests trigger a preflight OPTIONS, and what must the server return?",
+      "How can sending the wrong Host header or SNI make you reach the server but get the wrong site or certificate?"
+    ]
+  },
+  {
+    "id": 73,
+    "category": "Technical - Networking",
+    "difficulty": "Easy",
+    "importance": "Medium",
+    "question": "What is the difference between public and private IP addresses, and what does NAT do?",
+    "answer": "Public IP addresses are globally unique and routable on the internet, assigned out of the public address space, while private IP addresses come from the RFC 1918 reserved ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and are used inside home and corporate networks; they are not routable on the public internet. NAT (Network Address Translation) is what lets many devices with private IPs share one or a few public IPs: the router rewrites the source IP (and usually port, which is PAT/overloading) of outbound packets to its public address and keeps a translation table so it can map the responses back to the right internal host. This conserves scarce IPv4 addresses and adds a layer of isolation, since external hosts can't directly initiate connections to a private address without an explicit port-forward/DNAT rule. A practical consequence in support is that an internal client may reach a service fine while an external one can't, because there's no inbound NAT/port-forward configured. IPv6 was designed with enough address space that NAT is largely unnecessary there. You can see your private address with ipconfig/ip addr and your public address by querying an external 'what is my IP' service.",
+    "followUps": [
+      "What are the RFC 1918 private ranges?",
+      "Why can an internal host reach a service while an external host cannot, in NAT terms?",
+      "How does port forwarding (DNAT) let outside traffic reach an internal server?"
+    ]
+  },
+  {
+    "id": 74,
+    "category": "Technical - Networking",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "What is the difference between HTTP/1.1, HTTP/2, and HTTP/3, and why does it matter for performance and troubleshooting?",
+    "answer": "HTTP/1.1 sends one request/response at a time per TCP connection (with keep-alive to reuse the connection), so browsers open multiple parallel connections and suffer head-of-line blocking at the application layer. HTTP/2 multiplexes many concurrent streams over a single TCP connection with header compression (HPACK) and server push, which cuts the number of connections and TLS handshakes and speeds up multi-resource pages - but because it still rides on one TCP connection, a single lost packet causes TCP-level head-of-line blocking that stalls all streams. HTTP/3 moves to QUIC over UDP instead of TCP, which builds in TLS 1.3, supports connection migration, and gives each stream independent loss recovery so one lost packet no longer blocks unrelated streams, and it reduces handshake round trips. For troubleshooting this matters because the version changes what you observe: with HTTP/2 you can't reason about 'one connection per request,' a single TLS issue affects everything multiplexed on that connection, and HTTP/3 traffic is UDP/443 so a firewall blocking UDP will silently force a fallback to HTTP/2 over TCP. You can check which protocol is negotiated with curl -v or curl --http2 / --http3, or in the browser dev tools network tab's protocol column.",
+    "followUps": [
+      "What is head-of-line blocking, and how does each version address or suffer from it?",
+      "Why is HTTP/3 on UDP, and how could a firewall affect it?",
+      "How would you check which HTTP version a site actually negotiated?"
+    ]
+  },
+  {
+    "id": 75,
+    "category": "Technical - Networking",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "Walk me through what traceroute does, how it works, and how you'd interpret its output when diagnosing a reachability problem.",
+    "answer": "traceroute (tracert on Windows) maps the path packets take to a destination by exploiting the IP TTL field: it sends packets with TTL=1, which the first router decrements to zero and returns an ICMP Time Exceeded, revealing that hop; then TTL=2 to reveal the second hop, and so on, incrementing until it reaches the destination. Each line is one hop, usually with three latency samples because it sends multiple probes per TTL. Interpreting it: rising latency that stays reasonable is normal, but a sudden large jump and sustained high latency from one hop onward suggests congestion or a slow link there. Asterisks (* * *) at a hop mean no reply came back - this is often benign because many routers deprioritize or rate-limit ICMP/expired-TTL responses, so a single starred middle hop with later hops responding is not necessarily a fault. What matters is where the trace stops: if it dies and never reaches the destination, the path is broken or filtered at or beyond the last responding hop, which helps you point at a specific network segment or firewall. Note that traceroute shows the forward path only and the return path may differ, and that a host that drops all probes can still be serving traffic fine, so I treat it as a path-localization tool used alongside ping and port tests rather than proof by itself. On Linux you can also use mtr for a continuously updating combined ping/traceroute view.",
+    "followUps": [
+      "Why do some hops show asterisks even when the destination is reachable?",
+      "Does traceroute show the return path, and why does that matter?",
+      "How does tracert on Windows differ in the probe type it uses by default from Linux traceroute?"
+    ]
+  },
+  {
+    "id": 76,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "Walk me through your end-to-end incident-response process from the moment an alert fires (or a user reports an issue) to the moment the incident is closed.",
+    "answer": "A solid process has clear phases: detect/identify, triage, investigate/diagnose, mitigate/resolve, recover/verify, close, and follow-up. First I acknowledge the alert or ticket so others know it's being worked, then I confirm the issue is real (not a false positive) and assess scope and impact to assign severity. I open an incident record/bridge, communicate to stakeholders, and start investigating using observability data (metrics, logs, traces) to localize the problem. The priority is to restore service first via mitigation (rollback, failover, restart, scale, disable a feature flag) rather than waiting for a perfect root cause. Once service is restored I verify recovery with the same signals the users and dashboards rely on, then formally close the incident and communicate resolution. Afterward I capture timeline, root cause, and action items in a blameless post-incident review/RCA so the same failure is prevented or detected faster next time. Throughout, I keep timestamps and a running log so the handoff and the postmortem are accurate.",
+    "followUps": [
+      "Where in that flow does communication to stakeholders happen, and how often do you update them?",
+      "How do you balance restoring service quickly against preserving evidence for root cause analysis?",
+      "What artifacts from the incident feed into the postmortem?"
+    ]
+  },
+  {
+    "id": 77,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is the difference between a symptom and a root cause, and why does the distinction matter in support?",
+    "answer": "A symptom is the observable effect that something is wrong (slow page loads, 500 errors, a growing queue, users locked out), while the root cause is the underlying defect or condition that produces those symptoms (an exhausted DB connection pool, a bad deploy, an expired certificate, a misconfigured firewall rule). The distinction matters because treating only the symptom gives temporary relief but the problem recurs, often worse. For example, restarting a service that keeps running out of memory clears the symptom (high memory) but the leak (root cause) returns. Good support fixes the symptom fast to restore service, then drives to the actual root cause so the fix is permanent. A useful technique is to keep asking why each symptom occurs until you reach a cause you can actually change. Confusing the two leads to repeated incidents, wasted toil, and false confidence that an issue is closed.",
+    "followUps": [
+      "Give an example where the obvious symptom pointed to the wrong root cause.",
+      "Is it ever acceptable to ship a symptom-only fix, and what do you do afterward?"
+    ]
+  },
+  {
+    "id": 78,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "Describe root cause analysis techniques you use. How do the '5 Whys' and a fishbone/Ishikawa diagram differ?",
+    "answer": "Common RCA techniques include the 5 Whys, fishbone (Ishikawa) diagrams, fault-tree analysis, timeline reconstruction, and differential diagnosis (what changed?). The 5 Whys is a linear, iterative method: you state the problem and repeatedly ask 'why' (roughly five times) until you reach a cause you can act on; it's quick and good for fairly linear, single-cause failures. A fishbone diagram is broader and visual: you put the effect at the head and brainstorm contributing causes grouped into categories (e.g., people, process, technology, environment, data), which is better when failures are multi-causal or systemic. In practice I often start by asking 'what changed recently?' because most incidents follow a deploy, config change, traffic spike, or expiry. I correlate that with timeline evidence from logs, metrics, and traces so the conclusion is data-backed rather than a guess. The goal of any technique is to reach an actionable, verifiable cause, not just a plausible story.",
+    "followUps": [
+      "When would 5 Whys mislead you?",
+      "How do you avoid stopping at human error as the root cause?",
+      "How do you validate that the cause you found is actually the cause?"
+    ]
+  },
+  {
+    "id": 79,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "How do you decide the priority and severity of an incident? Are priority and severity the same thing?",
+    "answer": "Severity measures the technical impact/scope of the incident (how broken it is and for how many), while priority is the business urgency of fixing it (the order in which it gets worked). They're related but not identical: a typo on a marketing page might be high visibility but low severity and low priority, whereas a payment outage for all customers is high severity and top priority. I assess severity using impact (number/importance of users or systems affected, data loss, security exposure, money at risk) combined with whether a workaround exists. Many orgs use a P1-P4 or Sev1-Sev4 scale where a total outage of a critical service to many users is P1/Sev1 with the tightest response targets. I also weigh blast radius and whether the situation is degrading over time. The key is having an agreed matrix so the call is consistent and defensible rather than based on who is shouting loudest.",
+    "followUps": [
+      "Give an example of high severity but low priority, and the reverse.",
+      "Who has authority to raise or lower the severity mid-incident?",
+      "How does the presence of a workaround change the priority?"
+    ]
+  },
+  {
+    "id": 80,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "When do you escalate an incident to L3 (or engineering), and what does a good handoff contain?",
+    "answer": "I escalate when the issue is beyond L2's scope, access, or knowledge: it requires a code fix or deep system knowledge, it needs permissions I don't have, the documented runbooks are exhausted, the impact/severity warrants more expertise, or I'm approaching an SLA breach and time-boxed troubleshooting hasn't found a path. I escalate sooner for high-severity incidents rather than burning the clock. A good handoff is concise but complete so L3 doesn't restart from zero: a clear problem statement and current impact/severity, when it started and what changed, the affected systems/environment and versions, exactly what I've already checked and ruled out, relevant logs/trace IDs/metric screenshots/error messages, steps to reproduce, any mitigations already applied, and the specific ask. I also include links to the incident record and a point of contact. The principle is to escalate with context, not just forward the ticket; escalation is a transfer of context, not a transfer of blame.",
+    "followUps": [
+      "What's the downside of escalating too early versus too late?",
+      "How do you escalate without losing ownership of stakeholder communication?",
+      "What single piece of information do L3 engineers most often complain is missing?"
+    ]
+  },
+  {
+    "id": 81,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What is an SLA, and how do SLA, SLO, and SLI relate to each other?",
+    "answer": "An SLA (Service Level Agreement) is a formal, often contractual commitment to the customer about service quality, frequently with penalties if it's breached (for example, 99.9% monthly availability or a response time of 30 minutes for P1 tickets). An SLO (Service Level Objective) is the internal target the team aims for, usually set tighter than the SLA to leave a safety buffer. An SLI (Service Level Indicator) is the actual measured metric used to judge them, such as the percentage of successful requests, latency percentiles, or uptime. So the SLI is what you measure, the SLO is the goal for that measurement, and the SLA is the promise to the customer with consequences attached. In support these define your clock: response time (how fast you acknowledge) and resolution time (how fast you fix) targets per priority drive triage and escalation timing. The gap between SLO and SLA is your error budget and breathing room.",
+    "followUps": [
+      "What's the difference between response time and resolution time in an SLA?",
+      "Why would you set the SLO stricter than the SLA?",
+      "What is an error budget and how does it relate to these terms?"
+    ]
+  },
+  {
+    "id": 82,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "A web application intermittently returns HTTP 502 and 504 errors under load. Describe how you'd investigate and what each status code suggests.",
+    "answer": "Both are gateway-side errors reported by a reverse proxy or load balancer sitting in front of the app. A 502 Bad Gateway means the proxy got an invalid or no response from the upstream (the app crashed, refused the connection, returned garbage, or the worker died), while a 504 Gateway Timeout means the upstream accepted the connection but didn't respond within the proxy's timeout, pointing to slowness rather than a hard failure. I'd correlate the error spikes with load: check the four golden signals (traffic, latency, errors, saturation) to see if CPU, memory, connection pools, or thread pools are saturating. I'd look at the app/upstream logs and traces during the spikes to find slow downstream calls (database, external API) causing the 504s, and check for restarts/OOM kills causing the 502s. I'd verify proxy and upstream timeout settings, max connections, and health-check behavior, since aggressive timeouts or failing health checks can eject healthy backends. The differential is essentially: 502 says the backend is unhealthy/unreachable, 504 says the backend is too slow, so the data tells me whether to chase a crash or a latency/capacity problem.",
+    "followUps": [
+      "How would a 503 differ from a 502 here?",
+      "How could a database connection pool limit produce 504s without the DB itself being down?",
+      "What would you check first if the errors only occur on one node behind the load balancer?"
+    ]
+  },
+  {
+    "id": 83,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "A user reports the application is 'slow,' but your dashboards look green. How do you reconcile this and investigate?",
+    "answer": "First I treat 'slow' as a symptom to be quantified: I get specifics like which action, which page, what time, geography, device/network, and whether it's all users or one. Green dashboards often reflect server-side averages, so I check percentiles (p95/p99) rather than means, because averages hide tail latency that a single user feels. The problem may live outside what the dashboard covers: client-side rendering, the user's network or VPN, DNS, a CDN edge, or a specific tenant/account path. I'd pull traces for that user's requests if I have a trace ID or can reproduce, and look at real-user monitoring vs synthetic. I also confirm the dashboard's scope and time window aren't masking a localized issue (one region, one shard, one customer). The reconciliation usually comes down to aggregation hiding a tail, or the slowness occurring in a layer the dashboard doesn't instrument, so I widen the observability lens before declaring it 'not our problem'.",
+    "followUps": [
+      "Why can a healthy average latency still mean a bad user experience?",
+      "What client-side tools would you ask the user to provide?",
+      "How do real-user monitoring and synthetic monitoring complement each other here?"
+    ]
+  },
+  {
+    "id": 84,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "Describe how you'd troubleshoot a memory leak in a long-running service that gets OOM-killed every few days.",
+    "answer": "The signature is a slow, monotonic climb in memory until the OS or orchestrator kills the process, after which it resets and climbs again, often correlating with uptime rather than a specific event. I'd confirm the pattern on a memory-over-time graph and check whether it tracks request volume, a specific endpoint, or just elapsed time. I'd capture heap data: for a JVM, take heap dumps and watch GC logs and old-gen growth; for Node, take heap snapshots and diff them; for native code, use tooling like Valgrind or jemalloc profiling. Comparing snapshots over time shows which object types or allocations keep growing and never get freed, which points to retained references, unbounded caches, or unclosed resources (connections, streams, listeners). As immediate mitigation I'd schedule rolling restarts or raise the limit to buy time and protect availability while the real fix is developed. The root cause is code holding references it should release, so the permanent fix is bounding caches, closing resources, or fixing the leak, and I'd verify by watching the memory curve flatten after deploy. Restarting alone is symptom relief, not a fix.",
+    "followUps": [
+      "How do you distinguish a true leak from normal cache warm-up or expected steady-state growth?",
+      "What's the risk of just increasing the memory limit?",
+      "How would you tell a memory leak apart from memory fragmentation?"
+    ]
+  },
+  {
+    "id": 85,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "Medium",
+    "question": "What is a runbook (or knowledge base article), and why is it valuable for L2 support?",
+    "answer": "A runbook is a documented, step-by-step procedure for diagnosing and resolving a known issue or performing a routine operational task, such as restarting a service safely, clearing a stuck queue, rotating a certificate, or failing over a database. It captures the institutional knowledge of how to handle recurring situations so any engineer on shift can execute consistently, not just the one person who remembers. For L2 specifically it speeds up resolution, reduces errors under pressure, lowers mean time to resolution, and shortens onboarding. Good runbooks include prerequisites, the exact commands or console steps, expected output, rollback instructions, and when to escalate. They turn tribal knowledge into a repeatable, auditable process. After every novel incident, updating or creating a runbook is part of closing the loop so the next occurrence is faster.",
+    "followUps": [
+      "What should a good runbook entry contain?",
+      "How do you keep runbooks from going stale?",
+      "When should a recurring manual runbook step be automated instead?"
+    ]
+  },
+  {
+    "id": 86,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "What are the three pillars of observability, and how would you use metrics, logs, and traces together to localize a problem?",
+    "answer": "The three pillars are metrics, logs, and traces. Metrics are aggregated numeric time-series (request rate, error rate, latency, CPU) that are cheap to store and great for dashboards and alerting; they tell you that something is wrong and roughly where. Logs are timestamped, discrete event records (often structured) that give detailed context about what happened in a specific component, including error messages and stack traces. Traces follow a single request end-to-end across services, showing each span's timing so you can see which hop in a distributed call is slow or failing. The typical workflow is metrics first to detect and narrow ('errors spiked on service B'), traces next to localize which request path and downstream dependency is responsible, then logs to get the precise cause for that span or instance. Together they answer is it broken (metrics), where is it broken (traces), and why is it broken (logs). Correlating them via shared IDs (trace/correlation IDs) is what makes the drill-down fast.",
+    "followUps": [
+      "Which pillar do you start with during an active incident and why?",
+      "How do correlation IDs or trace IDs tie the three together?",
+      "What's the difference between monitoring and observability?"
+    ]
+  },
+  {
+    "id": 87,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "What are the four golden signals, and how would you use them to localize a problem?",
+    "answer": "The four golden signals from Google's SRE practice are latency, traffic, errors, and saturation. Latency is how long requests take (and you must separate the latency of successful vs failed requests, because fast errors can hide slow successes). Traffic is the demand on the system, such as requests per second or queue throughput. Errors is the rate of failed requests, including explicit 5xx and implicit failures like wrong content or policy violations. Saturation is how full the system is relative to its capacity, such as CPU, memory, disk I/O, or connection-pool utilization, and is often the leading indicator of impending trouble. To localize a problem I read them together: rising errors plus normal traffic suggests a code or dependency fault, rising latency plus rising saturation suggests a capacity bottleneck, and a traffic spike preceding latency and saturation suggests load-driven degradation. This gives a fast, consistent triage lens across almost any service before I drill into traces and logs.",
+    "followUps": [
+      "Why must you split latency between successful and failed requests?",
+      "Which signal is usually the best early-warning indicator and why?",
+      "How do the golden signals map to the RED and USE methods?"
+    ]
+  },
+  {
+    "id": 88,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "What's the difference between metrics, logs, and traces in terms of what each is best at? Give an example use of each.",
+    "answer": "Metrics are aggregated numbers over time and are best for trends, alerting, and dashboards; for example, watching error rate cross a threshold to fire an alert, or seeing CPU climb over a week. Logs are detailed discrete events and are best for understanding the specifics of what happened; for example, reading a stack trace or an error message that explains why a particular request failed. Traces show the full path of a single request across services and are best for finding where latency or failure occurs in a distributed system; for example, discovering that a checkout request spent 90% of its time waiting on the inventory service. A simple way to remember it: metrics tell you something is wrong, traces tell you where, and logs tell you why. They differ in cardinality and cost too: metrics are cheap and low-detail, logs and traces are richer but heavier to store and search. Effective teams use all three, not one in isolation.",
+    "followUps": [
+      "Why are high-cardinality dimensions a problem for metrics but fine for logs?",
+      "When would a trace be more useful than a log?",
+      "What is structured logging and why is it preferred?"
+    ]
+  },
+  {
+    "id": 89,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "You're looking at a dashboard during an incident. Error rate is up, latency is up, but traffic is flat. What does that pattern suggest, and what would you check next?",
+    "answer": "Flat traffic rules out a load spike as the cause, so the system is failing or slowing under normal demand, which points to an internal fault rather than overload. The combination of rising errors and rising latency commonly indicates a struggling dependency: a downstream service, database, or cache that has slowed down or started failing, causing requests to queue, time out, and error. I'd check saturation next, specifically connection pools, thread pools, queue depth, CPU, and memory, because a backed-up resource produces exactly this pattern. I'd also ask what changed: a recent deploy, config change, certificate expiry, or a dependency's own incident, since 'flat traffic but degrading' often follows a change rather than a usage shift. Then I'd use traces to find which call in the request path is slow or erroring, and logs on that component for the specific error. The key inference is that since demand didn't change, the problem is on the supply/dependency side, so I focus inward rather than on scaling for traffic.",
+    "followUps": [
+      "How would your conclusion change if traffic had spiked alongside the errors?",
+      "What if latency rose but error rate stayed flat?",
+      "Which golden signal would confirm a capacity bottleneck here?"
+    ]
+  },
+  {
+    "id": 90,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Hard",
+    "importance": "Medium",
+    "question": "Explain percentiles versus averages in latency dashboards. Why do SRE teams alert on p95/p99 rather than the mean?",
+    "answer": "An average (mean) latency sums all request times and divides by count, so a few very slow requests get diluted by many fast ones, hiding the worst experiences. A percentile describes the value below which a given share of requests fall: p95 latency is the value that 95% of requests are faster than, and p99 captures the slowest 1%. Teams alert on p95/p99 because tail latency is what real users actually feel and what often signals trouble (GC pauses, lock contention, a slow shard), and because at scale even 1% of requests can be millions of bad experiences. A mean can look perfectly healthy while p99 is catastrophic, so averages give false comfort. Percentiles also don't average cleanly across servers or time buckets, which is why they should be computed from histograms, not by averaging percentiles. In short, the mean answers 'typical', percentiles answer 'how bad is the bad case', and SLOs are usually written against percentiles for that reason.",
+    "followUps": [
+      "Why can't you simply average p99 values from two servers to get the overall p99?",
+      "When might the average still be a useful number to track?",
+      "What does a large gap between p50 and p99 tell you about the system?"
+    ]
+  },
+  {
+    "id": 91,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain the basic components of a message queue: producer, consumer, and broker. What problem does a queue solve?",
+    "answer": "A producer is the application that creates and sends messages, a broker is the middleware (such as RabbitMQ, ActiveMQ, Kafka, or a cloud queue like SQS) that receives, stores, and routes those messages, and a consumer is the application that reads and processes them. The queue decouples producers from consumers in both time and load: the producer doesn't have to wait for the consumer to be ready or fast, and the consumer can process at its own pace. This provides asynchronous communication, buffering during spikes, load leveling, and resilience, since messages persist in the broker even if the consumer is temporarily down. It also enables fan-out and multiple consumers to scale horizontally. The core problem it solves is tight coupling and synchronous bottlenecks between systems, replacing 'call and wait' with 'send and continue'. This makes the overall system more elastic and fault-tolerant.",
+    "followUps": [
+      "How does a topic (pub/sub) differ from a point-to-point queue?",
+      "What happens to messages if all consumers are down for an hour?",
+      "How does a queue help during a sudden traffic spike?"
+    ]
+  },
+  {
+    "id": 92,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What are message acknowledgements, and what is the difference between at-least-once, at-most-once, and exactly-once delivery?",
+    "answer": "An acknowledgement (ack) is the consumer's signal back to the broker that a message was successfully received and processed, allowing the broker to safely remove it; a negative ack or a missing ack within a timeout causes the broker to redeliver. The delivery guarantee depends on when you ack. At-most-once acknowledges before processing (or doesn't track), so messages are never duplicated but can be lost if the consumer crashes mid-process. At-least-once acknowledges only after successful processing, so nothing is lost, but a crash after processing but before the ack causes redelivery and therefore duplicates. Exactly-once is the ideal of each message taking effect once and only once, but it's very hard in distributed systems and usually approximated by combining at-least-once delivery with idempotent processing or transactional/dedup mechanisms. Most real systems choose at-least-once and make consumers idempotent. The trade-off is essentially loss vs duplication, and acks are the control point that decides which risk you take.",
+    "followUps": [
+      "If you must choose, why is at-least-once usually preferred over at-most-once?",
+      "Why is true exactly-once delivery so difficult across a network?",
+      "What happens if a consumer processes a message but crashes before sending the ack?"
+    ]
+  },
+  {
+    "id": 93,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "A monitoring alert says a message queue's depth is growing and not draining. What does a backing-up queue indicate, and how do you troubleshoot it?",
+    "answer": "A growing queue means producers are enqueuing faster than consumers are dequeuing; the imbalance is the symptom, and the job is to find which side is the cause. The depth can rise because consumers are down, crashed, or scaled too low; because consumers slowed down due to a downstream dependency (a database or API they call is slow or failing); because messages are failing and being redelivered in a loop; or because producer volume genuinely spiked. I'd first check consumer health and count: are they running, are they actually pulling messages, and is throughput per consumer normal? Then I'd check the consumer's downstream dependencies and error logs, since a slow database often manifests as a backing-up queue. I'd look for poison messages causing repeated failures and redelivery, and check whether a deploy or config change broke processing. Mitigations include scaling out consumers, fixing or bypassing the slow dependency, and routing repeatedly failing messages to a dead letter queue so the rest can drain. Left unchecked, a backed-up queue can exhaust broker storage or hit retention limits and start dropping messages, so it's time-sensitive.",
+    "followUps": [
+      "How would you tell whether the cause is slow consumers versus a producer spike?",
+      "What are the risks if the queue keeps growing unbounded?",
+      "How can a single poison message stall an entire partition or queue?"
+    ]
+  },
+  {
+    "id": 94,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Critical",
+    "question": "What is a Dead Letter Queue (DLQ), and what is a poison message? How do they relate?",
+    "answer": "A Dead Letter Queue is a separate queue where messages are routed when they cannot be processed successfully, typically after exceeding a maximum number of delivery/retry attempts, expiring, or failing validation. A poison message is a message that consistently fails processing every time it's delivered, often because it's malformed, references missing data, or triggers a bug; without protection it gets redelivered endlessly, blocking the queue and burning resources. They relate directly: the DLQ is the standard mechanism for handling poison messages, by moving them aside after N failed attempts so they stop blocking healthy traffic and can be inspected, fixed, or replayed later. This protects throughput and prevents an infinite redelivery loop. Operationally, a filling DLQ is itself an alertable signal that something is systematically failing, so I monitor DLQ depth, not just the main queue. Triage of the DLQ involves examining the failed messages to find the common cause and deciding whether to fix-and-replay or discard.",
+    "followUps": [
+      "How do you decide the right maximum retry count before dead-lettering?",
+      "Once messages are in the DLQ, what's your process for handling them?",
+      "Why is a growing DLQ a problem even though the main queue is draining fine?"
+    ]
+  },
+  {
+    "id": 95,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "Explain idempotency in the context of message processing. Why is it important, and how would you make a consumer idempotent?",
+    "answer": "Idempotency means processing the same message more than once has the same effect as processing it once, with no harmful side effects from the duplicates. It matters because most reliable messaging is at-least-once, so duplicate delivery is expected (network retries, redelivery after a missing ack, broker failover), and without idempotency a duplicate could double-charge a customer, send two emails, or create two records. To make a consumer idempotent, the common approach is to give each message a unique business/message ID and track processed IDs in a store (a dedup table or cache), skipping any ID already seen. Other techniques include using natural idempotent operations (setting a value rather than incrementing), upserts keyed on a unique constraint so duplicates collide harmlessly, and conditional writes/optimistic concurrency. For multi-step side effects you may need a transactional outbox or to make the downstream call itself idempotent with an idempotency key. The principle is to design effects so 'do this again' is safe, because in distributed messaging you cannot fully prevent duplicates, you can only neutralize them.",
+    "followUps": [
+      "How long do you need to retain dedup keys, and what bounds that?",
+      "How would idempotency interact with exactly-once semantics?",
+      "What's a non-idempotent operation that's hard to make safe, and how would you handle it?"
+    ]
+  },
+  {
+    "id": 96,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "Medium",
+    "question": "At a high level, how would you troubleshoot a failing integration flow in MuleSoft (or a similar integration/iPaaS platform)?",
+    "answer": "An integration flow connects systems through stages like an inbound endpoint/listener, transformation/mapping, routing, and outbound connectors to target systems, so I troubleshoot it as a pipeline and isolate which stage fails. I start with the platform's monitoring and logs (in MuleSoft, Anypoint Monitoring and the application logs in CloudHub/Runtime Manager) to find where the flow errors and capture the correlation ID so I can trace one transaction end to end. I check the inbound side (is the trigger/listener receiving messages, auth/credentials valid), then the transformation (DataWeave mapping errors, unexpected payload shape, null/format issues), then connectivity to the downstream system (timeouts, 4xx/5xx from the target API, expired tokens, firewall/whitelist issues). I look at whether errors are handled or are dead-lettering, and whether retries are amplifying load. Common root causes are credential/token expiry, payload schema changes, downstream system slowness or downtime, and network/connectivity restrictions. The approach is the same isolate-the-stage logic as any pipeline: confirm input, confirm transform, confirm output, and use correlation IDs plus the golden signals to localize before drilling into the specific connector or mapping.",
+    "followUps": [
+      "How would a correlation ID help you trace one transaction across systems?",
+      "If the target API started returning 401s, what would you check?",
+      "How do retry policies and error handling in the flow affect downstream load during an outage?"
+    ]
+  },
+  {
+    "id": 97,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Easy",
+    "importance": "High",
+    "question": "Explain what EC2, S3, and RDS are in AWS, and give a typical use for each.",
+    "answer": "EC2 (Elastic Compute Cloud) provides resizable virtual machines (instances) in the cloud where you run your own OS and applications; a typical use is hosting an application server or backend service. S3 (Simple Storage Service) is highly durable object storage for files/blobs accessed over an API, organized into buckets; typical uses are storing static assets, backups, logs, images, and data-lake content, but it is not a filesystem or a block device. RDS (Relational Database Service) is a managed relational database (MySQL, PostgreSQL, SQL Server, Oracle, MariaDB, or Aurora) where AWS handles patching, backups, replication, and failover so you don't run the DB engine yourself; typical use is the transactional database behind an application. A common architecture combines all three: an app runs on EC2 (or containers), stores its structured data in RDS, and keeps files, backups, and static content in S3. The key distinctions are compute (EC2) vs object storage (S3) vs managed relational database (RDS).",
+    "followUps": [
+      "Why is S3 not appropriate as a database or as a mounted disk for an OS?",
+      "What does AWS manage for you with RDS that you'd have to do yourself on EC2?",
+      "When would you choose EC2 over a managed/serverless compute option?"
+    ]
+  },
+  {
+    "id": 98,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What is a security group in AWS, and how does it differ from a network ACL? How can a misconfigured security group cause an outage?",
+    "answer": "A security group is a stateful virtual firewall attached to instances/ENIs that controls inbound and outbound traffic by rules based on protocol, port, and source/destination (an IP/CIDR or another security group). Being stateful means if you allow an inbound request, the response is automatically allowed out without a matching outbound rule. A network ACL (NACL) operates at the subnet level, is stateless (you must allow both directions explicitly), supports ordered numbered rules, and can have explicit deny rules, whereas security groups only allow (no deny) and are evaluated as a whole. A misconfigured security group causes outages easily: removing or not having an inbound rule for the app's port blocks all client traffic, forgetting to allow the database port from the app tier breaks connectivity even though both services are healthy, or an overly broad rule creates a security exposure. Because rules are allow-only and default-deny, a missing rule silently drops traffic with connection timeouts rather than clear errors. So when something 'can't connect' in AWS, security groups and NACLs are among the first things I check.",
+    "followUps": [
+      "Why does referencing another security group as a source scale better than hardcoding IPs?",
+      "If two instances in the same VPC can't talk, what security-layer items do you check?",
+      "What symptom (timeout vs connection refused) typically indicates a security group block versus the service being down?"
+    ]
+  },
+  {
+    "id": 99,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Medium",
+    "importance": "High",
+    "question": "What is the difference between a virtual machine and a container? When would you choose one over the other?",
+    "answer": "A virtual machine virtualizes hardware: a hypervisor runs multiple guest OS instances, each with its own full kernel, so VMs are strongly isolated but heavier (gigabytes, slower to boot, more overhead). A container virtualizes the OS: containers share the host kernel and package just the application plus its dependencies, so they're lightweight (megabytes, start in seconds, higher density) but isolation is weaker because they share that kernel. You'd choose VMs when you need strong isolation, a different OS/kernel than the host, running legacy or monolithic workloads, or stronger security boundaries between tenants. You'd choose containers for microservices, fast scaling, consistent dev-to-prod packaging, CI/CD, and high-density deployments, typically orchestrated by Kubernetes or ECS. They're not mutually exclusive: containers very often run inside VMs to get both density and isolation, which is what most managed Kubernetes services do under the hood. The core trade-off is isolation and flexibility (VMs) versus speed, footprint, and portability (containers).",
+    "followUps": [
+      "Why do containers start so much faster than VMs?",
+      "What are the security implications of containers sharing the host kernel?",
+      "How does a container image differ from a VM image?"
+    ]
+  },
+  {
+    "id": 100,
+    "category": "Technical - App Support & Systems",
+    "difficulty": "Hard",
+    "importance": "High",
+    "question": "An application on an EC2 instance suddenly can't connect to its RDS database, though nothing in the app code changed. Walk through how you'd diagnose this cloud connectivity issue.",
+    "answer": "Because the code didn't change, I focus on what could have changed in the environment and work layer by layer from the app outward. First I reproduce and characterize the failure: is it a connection timeout (suggesting traffic is being blocked or the host is unreachable) or a connection refused/auth error (suggesting the DB is reachable but rejecting), and is it total or intermittent? I check whether RDS itself is healthy and available (status, recent failover/maintenance, storage full, max-connections exhausted), since an RDS failover changes the active endpoint and a connection-limit ceiling looks like an outage. Then I check the network path: the security group on RDS must allow the DB port from the EC2 instance's security group or IP, the EC2 security group must allow the outbound, and NACLs/route tables/subnet must permit traffic; a recent security-group or firewall change is a classic cause. I verify DNS resolution of the RDS endpoint (apps should use the endpoint name, not a cached IP, because failover changes the IP) and test connectivity directly with a port check or DB client from the instance to separate network from app. I also check for credential/secret rotation or an expired password, IAM-auth token expiry, and whether the connection pool is exhausted or holding stale connections. The methodical isolation, app to network to DB, plus the 'what changed' lens (security group edit, failover, secret rotation, hitting connection limits) is what pinpoints it quickly.",
+    "followUps": [
+      "How would a connection timeout point you toward the network layer versus a refused connection or auth error pointing elsewhere?",
+      "Why should the app connect via the RDS endpoint DNS name rather than a fixed IP?",
+      "How could RDS reaching its max-connections limit produce this exact symptom, and how would you confirm it?"
+    ]
+  }
+]

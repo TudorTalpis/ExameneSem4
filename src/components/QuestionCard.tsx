@@ -86,13 +86,7 @@ function McqQuestion({ question, shuffledOrder, onAnswer, readOnly = false, read
     if (answered || readOnly) return;
     setChosen(shuffledPos);
     setAnswered(true);
-
-    const isCorrect   = shuffledPos === shuffledCorrectPos;
-    const originalIdx = shuffledOrder[shuffledPos];
-
-    if (isCorrect) {
-      setTimeout(() => onAnswer(shuffledPos, originalIdx), 800);
-    }
+    // Nu mai avansăm automat la răspuns corect: explicația + butonul „Continuă" apar mereu.
   };
 
   const handleNext = () => {
@@ -152,16 +146,9 @@ function McqQuestion({ question, shuffledOrder, onAnswer, readOnly = false, read
       {/* Mod history: explicație mereu vizibilă, fără buton */}
       {answered && readOnly && <ExplanationBox text={question.explanation} />}
 
-      {/* Mod normal: explicație + buton doar la răspuns greșit */}
-      {answered && !readOnly && !isCorrect && (
-        <AnswerFeedback explanation={question.explanation} onNext={handleNext} />
-      )}
-
-      {/* Mod normal: flash corect (înainte de auto-avans) */}
-      {answered && !readOnly && isCorrect && (
-        <div className="mt-3 text-center text-emerald-600 text-sm font-medium animate-pulse">
-          ✓ Corect!
-        </div>
+      {/* Mod normal: explicație + buton la orice răspuns (corect sau greșit) */}
+      {answered && !readOnly && (
+        <AnswerFeedback explanation={question.explanation} onNext={handleNext} isCorrect={isCorrect} />
       )}
     </div>
   );
@@ -181,14 +168,12 @@ function OrderQuestion({ question, onAnswer, readOnly = false }: Props) {
   const handleResult = (isCorrect: boolean) => {
     setAnswered(true);
     setCorrect(isCorrect);
-    // correctIndex e 0 pentru întrebările 'order'; răspuns corect => answerQuestion(0),
-    // răspuns greșit => answerQuestion(-1) (≠ 0), reluând logica normală de scor/repetiție.
-    if (isCorrect) {
-      setTimeout(() => onAnswer(0, 0), 800);
-    }
   };
 
-  const handleNext = () => onAnswer(0, -1);
+  // correctIndex e 0 pentru întrebările 'order'; răspuns corect => answerQuestion(0),
+  // răspuns greșit => answerQuestion(-1) (≠ 0), reluând logica normală de scor/repetiție.
+  // Avansul are loc la apăsarea butonului „Continuă", nu automat.
+  const handleNext = () => onAnswer(0, correct ? 0 : -1);
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -216,16 +201,9 @@ function OrderQuestion({ question, onAnswer, readOnly = false }: Props) {
       {/* Mod history: explicație mereu vizibilă */}
       {readOnly && <ExplanationBox text={question.explanation} />}
 
-      {/* Răspuns greșit: explicație + buton „Următoarea" */}
-      {answered && !readOnly && !correct && (
-        <AnswerFeedback explanation={question.explanation} onNext={handleNext} />
-      )}
-
-      {/* Răspuns corect: flash */}
-      {answered && !readOnly && correct && (
-        <div className="mt-3 text-center text-emerald-600 text-sm font-medium animate-pulse">
-          ✓ Corect!
-        </div>
+      {/* Mod normal: explicație + buton la orice răspuns (corect sau greșit) */}
+      {answered && !readOnly && (
+        <AnswerFeedback explanation={question.explanation} onNext={handleNext} isCorrect={correct} />
       )}
     </div>
   );
