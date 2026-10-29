@@ -44,7 +44,11 @@ export type Topic =
   | 'stef-messaging'
   | 'stef-mongodb'
   | 'stef-cloud'
-  | 'stef-customer';
+  | 'stef-customer'
+  // SSM (Sănătate și Securitate în Muncă) topics
+  | 'introducere-modele'
+  | 'legislatie-management'
+  | 'factori-risc';
 
 /**
  * 'mcq'   – clasic: alegi o opțiune (inclusiv analiză A/B și completare cod).
