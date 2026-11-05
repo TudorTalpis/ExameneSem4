@@ -21,7 +21,7 @@ export function AnswerFeedback({ explanation, onNext, isCorrect }: Props) {
       )}
       <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
         <p className="font-semibold text-slate-800 dark:text-slate-100 mb-1">📖 Explicație</p>
-        <p>{explanation}</p>
+        <p className="whitespace-pre-line">{explanation}</p>
       </div>
       <button
         onClick={onNext}
