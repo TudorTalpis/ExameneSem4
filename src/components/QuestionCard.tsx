@@ -56,7 +56,7 @@ function ExplanationBox({ text }: { text: string }) {
     <div className="mt-4 animate-fadeIn">
       <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl p-4 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
         <p className="font-semibold text-slate-800 dark:text-slate-100 mb-1">📖 Explicație</p>
-        <p>{text}</p>
+        <p className="whitespace-pre-line">{text}</p>
       </div>
     </div>
   );
@@ -138,7 +138,7 @@ function McqQuestion({ question, shuffledOrder, onAnswer, readOnly = false, read
             <span className="font-semibold text-slate-400 dark:text-slate-500 mr-2">
               {String.fromCharCode(65 + shuffledPos)}.
             </span>
-            <span className={asCode ? 'font-mono' : ''}>{question.options[origIdx]}</span>
+            <span className={asCode ? 'font-mono whitespace-pre-wrap' : ''}>{question.options[origIdx]}</span>
           </button>
         ))}
       </div>

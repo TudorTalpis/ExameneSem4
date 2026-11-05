@@ -48,7 +48,16 @@ export type Topic =
   // SSM (Sănătate și Securitate în Muncă) topics
   | 'introducere-modele'
   | 'legislatie-management'
-  | 'factori-risc';
+  | 'factori-risc'
+  // PD — Programare Declarativă (Python) topics
+  | 'py-functii'
+  | 'py-map-filter-reduce'
+  | 'py-structuri'
+  | 'py-numpy'
+  | 'py-scraping'
+  | 'py-pandas'
+  | 'py-grafice'
+  | 'py-test-model';
 
 /**
  * 'mcq'   – clasic: alegi o opțiune (inclusiv analiză A/B și completare cod).
